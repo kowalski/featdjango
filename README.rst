@@ -26,13 +26,13 @@ Features implemented:
 
 * Running server in development.
 
+* Reloading of the code in development (by restarting the process).
+
 
 TODO:
 -----
 
 * Process the requests in threads.
-
-* Reloading of the code.
 
 * Call methods returning Deferreds from inside the thread. The thread should wait for the result.
 

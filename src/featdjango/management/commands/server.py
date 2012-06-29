@@ -2,7 +2,7 @@ import re
 import logging
 from optparse import make_option
 
-from featdjango.core import server
+from featdjango.core import server, reloader
 
 from feat.common import log
 
@@ -23,7 +23,10 @@ class Command(BaseCommand):
     option_list = BaseCommand.option_list + (
         make_option('--featlog', action='store',
                     dest='featlog', default=None,
-                    help='Log feat log a file (default: log to django log)'), )
+                    help='Log feat log a file (default: log to django log)'),
+        make_option('--noreload', action='store_false', dest='use_reloader',
+                    default=True,
+                    help='Tells Django to NOT use the auto-reloader.'))
 
     # Validation is called explicitly each time the server is reloaded.
     requires_model_validation = False
@@ -59,6 +62,9 @@ class Command(BaseCommand):
 
         site = server.Server(self.addr, int(self.port))
         reactor.callWhenRunning(site.initiate)
+        if options.get('use_reloader'):
+            task = reloader.Reloader(reactor, site)
+            reactor.callWhenRunning(task.run)
         try:
             reactor.run()
         except KeyboardInterrupt:

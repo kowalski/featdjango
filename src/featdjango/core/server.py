@@ -45,14 +45,14 @@ class FeatHandler(BaseHandler):
 
 class Server(webserver.Server):
 
-    def __init__(self, hostname, port, server_name=''):
+    def __init__(self, hostname, port, server_name='', log_keeper=None):
         self.hostname = hostname
 
         server_name = server_name or hostname
 
         self.res = Root(self, server_name)
         # FIXME: server listens on all the interfaces
-        webserver.Server.__init__(self, port, self.res)
+        webserver.Server.__init__(self, port, self.res, log_keeper=log_keeper)
 
 
 class FeatHttpRequest(HttpRequest):

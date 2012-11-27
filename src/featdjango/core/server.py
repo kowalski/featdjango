@@ -183,7 +183,11 @@ class Root(object):
     def render_resource(self, request, response, location):
         django_request = FeatHttpRequest(
             request, self._name, self.server.port)
-        django_response = self._handler.get_response(django_request)
+        d = threads.deferToThread(self._handler.get_response, django_request)
+        d.addCallback(self._translate_response, response)
+        return d
+
+    def _translate_response(self, django_response, response):
         for header_name, header_value in django_response.items():
             response.set_header(header_name, header_value)
         for cookie_name, cookie in django_response.cookies.iteritems():

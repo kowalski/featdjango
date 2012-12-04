@@ -1,5 +1,7 @@
 import Queue
 
+from twisted.python import failure
+
 from feat.common import defer
 from feat.test import common
 
@@ -35,8 +37,68 @@ class ThreadpoolTest(common.TestCase):
 
         return finish, d
 
+    def do_async_work(self, result):
+
+        def give_defer(result):
+            if isinstance(result, Exception):
+                return defer.fail(result)
+            else:
+                return defer.succeed(result)
+
+        def body():
+            return threadpool.blocking_call(give_defer, result)
+
+        d = self.tp.deferToThread(body)
+        return d
+
+    @defer.inlineCallbacks
+    def testDoingAsyncCallFailsSynchronously(self):
+
+        def call():
+            raise AttributeError('blast!')
+
+        def body():
+            return threadpool.blocking_call(call)
+
+        d = self.tp.deferToThread(body)
+        self.assertFailure(d, AttributeError)
+        yield d
+
+    @defer.inlineCallbacks
+    def testDoingAsyncCallEndsUpSynchronus(self):
+
+        def call():
+            return 5
+
+        def body():
+            return threadpool.blocking_call(call)
+
+        r = yield self.tp.deferToThread(body)
+        self.assertEqual(5, r)
+
     @defer.inlineCallbacks
     def testDoingAsyncWork(self):
+        res = yield self.do_async_work(4)
+        self.assertEqual(4, res)
+        # check that the stats are processed
+        self.assertEqual(1, len(self.stats.finished))
+        self.assertEqual(0, len(self.stats.processing))
+        record = self.stats.finished[0]
+        self.assertEqual(1, len(record.naps))
+        self.assertIn('give_defer', record.naps[0].reason)
+
+        ex = AttributeError('attribute')
+        d = self.do_async_work(ex)
+        self.assertFailure(d, AttributeError)
+        yield d
+        self.assertEqual(2, len(self.stats.finished))
+        self.assertEqual(0, len(self.stats.processing))
+        record = self.stats.finished[1]
+        self.assertEqual(1, len(record.naps))
+        self.assertIn('give_defer', record.naps[0].reason)
+
+    @defer.inlineCallbacks
+    def testDoingSyncWork(self):
         finish, d = self.do_sync_work('some work')
         self.assertEqual(1, len(self.stats.processing))
         record = self.stats.processing.values()[0]
@@ -82,14 +144,14 @@ class ThreadpoolTest(common.TestCase):
         # first run a few
         control = [self.do_sync_work(str(x)) for x in range(less_than_max)]
         self.assertEqual(less_than_max, len(self.stats.processing))
-        yield self.wait_for(lambda : self.stats.threads == less_than_max, 5,
+        yield self.wait_for(lambda: self.stats.threads == less_than_max, 5,
                             freq=0.01)
 
         # now run some more
         control.extend([self.do_sync_work(str(x))
                         for x in range(less_than_max, more_than_max)])
         self.assertEqual(more_than_max, len(self.stats.processing))
-        yield self.wait_for(lambda : self.stats.threads == self.tp.max, 5,
+        yield self.wait_for(lambda: self.stats.threads == self.tp.max, 5,
                             freq=0.01)
 
         # now finish one

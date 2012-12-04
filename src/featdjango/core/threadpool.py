@@ -1,4 +1,6 @@
+import Queue
 import uuid
+import threading
 import time
 
 from zope.interface import Interface, implements
@@ -6,6 +8,18 @@ from zope.interface import Interface, implements
 from feat.common import reflect, error, formatable, log, defer
 
 from twisted.python import threadpool, context, failure
+
+
+def blocking_call(_method, *args, **kwargs):
+    return blocking_call_ex(_method, args, kwargs)
+
+
+def blocking_call_ex(method, args, kwargs):
+    ct = threading.current_thread()
+    if hasattr(ct, 'wait_for_defer'):
+        return ct.wait_for_defer(method, args, kwargs)
+    else:
+        return method(*args, **kwargs)
 
 
 class IThreadStatistics(Interface):
@@ -142,7 +156,60 @@ class MemoryThreadStatistics(log.Logger):
         self.threads -= 1
 
 
+class Thread(threading.Thread):
+
+    def wait_for_defer(self, method, args=tuple(), kwargs=dict()):
+        self.reactor.callFromThread(
+            self._blocking_call_body, method, args, kwargs)
+        job_id = context.get('__threadpool_job_id')
+        self.call_stats(
+            'fallen_asleep', job_id, reflect.canonical_name(method))
+        res = self._defer_queue.get()
+        self.call_stats('woken_up', job_id)
+
+        if isinstance(res, Exception):
+            raise res
+        else:
+            return res
+
+    def _blocking_call_body(self, method, args, kwargs):
+        try:
+            r = method(*args, **kwargs)
+        except Exception as e:
+            self._blocking_call_cb(e)
+            return
+
+        if not isinstance(r, defer.Deferred):
+            self._blocking_call_cb(r)
+        else:
+            r.addBoth(self._blocking_call_cb)
+            return r
+
+    def _blocking_call_cb(self, result):
+        if isinstance(result, failure.Failure):
+            self._defer_queue.put(result.value)
+        else:
+            self._defer_queue.put(result)
+
+    def run(self):
+        try:
+            self._defer_queue = Queue.Queue(0)
+            self.stats = None
+            self.reactor = None
+            super(Thread, self).run()
+        finally:
+            del self._defer_queue
+            del self.stats
+            del self.reactor
+
+    def call_stats(self, method, *args):
+        if self.stats:
+            self.reactor.callFromThread(getattr(self.stats, method), *args)
+
+
 class ThreadPoolWithStats(threadpool.ThreadPool, log.Logger):
+
+    threadFactory = Thread
 
     def __init__(self, minthreads=5, maxthreads=20, statistics=None,
                  reactor=None, logger=None):
@@ -156,7 +223,7 @@ class ThreadPoolWithStats(threadpool.ThreadPool, log.Logger):
 
     def callInThreadWithCallback(self, onResult, func, *args, **kw):
         job_explanation = kw.pop('job_explanation', None) or \
-                          reflect.canocial_name(func)
+                          reflect.canonical_name(func)
         if not self.joined and self._stats:
             job_id = str(uuid.uuid1())
             self._stats.new_item(job_id, job_explanation)
@@ -184,23 +251,22 @@ class ThreadPoolWithStats(threadpool.ThreadPool, log.Logger):
         threadpool is stopped.
         """
 
-        def call_stats(method, *args):
-            if self._stats:
-                self._reactor.callFromThread(
-                    getattr(self._stats, method), *args)
-
-        call_stats('new_thread')
 
         ct = self.currentThread()
+        ct.reactor = self._reactor
+        ct.stats = self._stats
+        ct.call_stats('new_thread')
+
         o = self.q.get()
         while o is not threadpool.WorkerStop:
             self.working.append(ct)
             ctx, function, args, kwargs, onResult = o
             job_id = kwargs.pop('__threadpool_job_id')
+            ctx['__threadpool_job_id'] = job_id
             del o
 
             try:
-                call_stats('started_item', job_id)
+                ct.call_stats('started_item', job_id)
                 result = context.call(ctx, function, *args, **kwargs)
                 success = True
             except:
@@ -213,7 +279,7 @@ class ThreadPoolWithStats(threadpool.ThreadPool, log.Logger):
                     result = failure.Failure()
 
             del function, args, kwargs
-            call_stats('finished_item', job_id)
+            ct.call_stats('finished_item', job_id)
 
             self.working.remove(ct)
 
@@ -227,4 +293,4 @@ class ThreadPoolWithStats(threadpool.ThreadPool, log.Logger):
             self.waiters.remove(ct)
 
         self.threads.remove(ct)
-        call_stats('exit_thread')
+        ct.call_stats('exit_thread')

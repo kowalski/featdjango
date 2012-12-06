@@ -62,6 +62,8 @@ class Command(BaseCommand):
 
         site = server.Server(self.addr, int(self.port))
         reactor.callWhenRunning(site.initiate)
+        reactor.addSystemEventTrigger('before', 'shutdown', site.cleanup)
+
         if options.get('use_reloader'):
             task = reloader.Reloader(reactor, site)
             reactor.callWhenRunning(task.run)

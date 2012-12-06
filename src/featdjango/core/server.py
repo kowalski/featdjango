@@ -15,6 +15,8 @@ from django.utils import datastructures
 
 from feat.web import webserver, http
 
+from featdjango.core import threadpool
+
 from twisted.internet import reactor, threads
 from twisted.web.http import stringToDatetime
 
@@ -49,10 +51,18 @@ class Server(webserver.Server):
         self.hostname = hostname
 
         server_name = server_name or hostname
+        self.threadpool = threadpool.ThreadPoolWithStats(logger=log_keeper)
+        self.threadpool.start()
 
         self.res = Root(self, server_name)
         # FIXME: server listens on all the interfaces
         webserver.Server.__init__(self, port, self.res, log_keeper=log_keeper)
+
+    def cleanup(self):
+        self.info('Shutting down.')
+        self.threadpool.stop()
+        return webserver.Server.cleanup(self)
+
 
 
 class FeatHttpRequest(HttpRequest):
@@ -159,7 +169,7 @@ class Root(object):
 
         from django.conf import settings
         self._static_path = tuple(filter(None, settings.STATIC_URL.split('/')))
-        self._static = Static()
+        self._static = Static(self.server)
 
     def set_inherited(self, authenticator=None, authorizer=None):
         self.authenticator = authenticator
@@ -217,11 +227,12 @@ class Static(object):
 
     BUFFER_SIZE = 1024*1024*4
 
-    def __init__(self):
+    def __init__(self, server):
         self.authenticator = None
         self.authorizer = None
 
         self._mime_types = mimetypes.MimeTypes()
+        self.server = server
 
     ### IWebResource ###
 
@@ -281,7 +292,8 @@ class Static(object):
 
         response.do_not_cache()
 
-        return threads.deferToThread(self._write_resource, response, res)
+        return self.server.threadpool.deferToThread(
+            self._write_resource, response, res)
 
     def render_error(self, request, response, error):
         return error

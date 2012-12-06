@@ -71,7 +71,8 @@ class Server(webserver.Server):
         return webserver.Server.cleanup(self)
 
     def _init_thread(self):
-        set_script_prefix(self._prefix)
+        if self._prefix:
+            set_script_prefix(self._prefix)
 
 
 

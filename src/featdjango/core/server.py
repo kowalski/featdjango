@@ -9,6 +9,7 @@ from zope.interface import implements
 from threading import Lock
 
 from django.core.handlers.base import BaseHandler
+from django.core.urlresolvers import set_script_prefix
 from django.http import HttpRequest, QueryDict
 from django.contrib.staticfiles import finders
 from django.utils import datastructures
@@ -47,14 +48,17 @@ class FeatHandler(BaseHandler):
 
 class Server(webserver.Server):
 
-    def __init__(self, hostname, port, server_name='', log_keeper=None):
+    def __init__(self, hostname, port, server_name='', log_keeper=None,
+                 prefix=None):
         self.hostname = hostname
 
+        self._prefix = prefix
         server_name = server_name or hostname
-        self.threadpool = threadpool.ThreadPoolWithStats(logger=log_keeper)
+        self.threadpool = threadpool.ThreadPoolWithStats(
+            logger=log_keeper, init_thread=self._init_thread)
         self.threadpool.start()
 
-        self.res = Root(self, server_name)
+        self.res = Root(self, server_name, prefix=prefix)
         # FIXME: server listens on all the interfaces
         webserver.Server.__init__(self, port, self.res, log_keeper=log_keeper)
 
@@ -63,17 +67,29 @@ class Server(webserver.Server):
         self.threadpool.stop()
         return webserver.Server.cleanup(self)
 
+    def _init_thread(self):
+        set_script_prefix(self._prefix)
+
+
 
 
 class FeatHttpRequest(HttpRequest):
     '''Adapter of feat.web.webserver.Request to the sublcass of
     django.http.HttpRequest which can be understood by djanbo BaseHandler.'''
 
-    def __init__(self, request, server_name='', server_port=''):
+    def __init__(self, request, server_name='', server_port='', prefix=None):
         self._request = request
 
         self.path = request.path
-        self.path_info = request.path
+        if not self.path.endswith('/'):
+            self.path += '/'
+        if prefix:
+            self.path_info = '/' + '/'.join(
+                filter(None, self.path.split('/'))[len(prefix):]) + '/'
+        else:
+            self.path_info = self.path
+
+
         self.method = request.method.name
         self._server_name = server_name
         self._server_port = server_port
@@ -157,7 +173,7 @@ class Root(object):
 
     implements(webserver.IWebResource)
 
-    def __init__(self, server, name):
+    def __init__(self, server, name, prefix=None):
         self.server = server
         self.authenticator = None
         self.authorizer = None
@@ -166,6 +182,9 @@ class Root(object):
 
         # name is a remote hostname passed to the request.META
         self._name = name
+        self._prefix = None
+        if prefix:
+            self._prefix = tuple(filter(None, prefix.split('/')))
 
         from django.conf import settings
         self._static_path = tuple(filter(None, settings.STATIC_URL.split('/')))
@@ -188,12 +207,15 @@ class Root(object):
         l = len(self._static_path)
         if remaining[:l] == self._static_path:
             return self._static, remaining[l:]
+        if self._prefix and remaining[:len(self._prefix)] != self._prefix:
+            return
         return self
 
     def render_resource(self, request, response, location):
         django_request = FeatHttpRequest(
-            request, self._name, self.server.port)
-        d = threads.deferToThread(self._handler.get_response, django_request)
+            request, self._name, self.server.port, self._prefix)
+        d = self.server.threadpool.deferToThread(
+            self._handler.get_response, django_request)
         d.addCallback(self._translate_response, response)
         return d
 

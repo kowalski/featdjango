@@ -26,7 +26,10 @@ class Command(BaseCommand):
                     help='Log feat log a file (default: log to django log)'),
         make_option('--noreload', action='store_false', dest='use_reloader',
                     default=True,
-                    help='Tells Django to NOT use the auto-reloader.'))
+                    help='Tells Django to NOT use the auto-reloader.'),
+        make_option('--prefix', action='store', dest='prefix',
+                    help='Run application under a prefix (example: "/myapp")'))
+
 
     # Validation is called explicitly each time the server is reloaded.
     requires_model_validation = False
@@ -60,7 +63,8 @@ class Command(BaseCommand):
 
         log.info('feat', "Listening on %s:%s", self.addr, self.port)
 
-        site = server.Server(self.addr, int(self.port))
+        site = server.Server(self.addr, int(self.port),
+                             prefix=options.get('prefix'))
         reactor.callWhenRunning(site.initiate)
         reactor.addSystemEventTrigger('before', 'shutdown', site.cleanup)
 

@@ -216,8 +216,9 @@ class ThreadPoolWithStats(threadpool.ThreadPool, log.Logger):
     threadFactory = Thread
 
     def __init__(self, minthreads=5, maxthreads=20, statistics=None,
-                 reactor=None, logger=None):
+                 reactor=None, logger=None, init_thread=None):
         log.Logger.__init__(self, logger)
+        self._init_thread = init_thread
         threadpool.ThreadPool.__init__(
             self, minthreads, maxthreads, name="Django")
         self._stats = None
@@ -264,6 +265,9 @@ class ThreadPoolWithStats(threadpool.ThreadPool, log.Logger):
         ct.stats = self._stats
         if self._stats:
             self._stats.new_thread()
+
+        if callable(self._init_thread):
+            self._init_thread()
 
         o = self.q.get()
         while o is not threadpool.WorkerStop:

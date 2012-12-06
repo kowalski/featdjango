@@ -161,11 +161,9 @@ class Thread(threading.Thread):
     def wait_for_defer(self, method, args=tuple(), kwargs=dict()):
         self.reactor.callFromThread(
             self._blocking_call_body, method, args, kwargs)
-        job_id = context.get('__threadpool_job_id')
-        self.call_stats(
-            'fallen_asleep', job_id, reflect.canonical_name(method))
+        self.call_stats('fallen_asleep', reflect.canonical_name(method))
         res = self._defer_queue.get()
-        self.call_stats('woken_up', job_id)
+        self.call_stats('woken_up')
 
         if isinstance(res, Exception):
             raise res
@@ -202,9 +200,15 @@ class Thread(threading.Thread):
             del self.stats
             del self.reactor
 
-    def call_stats(self, method, *args):
+    def call_stats(self, method, *args, **kwargs):
         if self.stats:
-            self.reactor.callFromThread(getattr(self.stats, method), *args)
+            if 'job_id' in kwargs:
+                job_id = kwargs.pop('job_id')
+            else:
+                job_id = context.get('__threadpool_job_id')
+            if job_id:
+                self.reactor.callFromThread(
+                    getattr(self.stats, method), job_id, *args, **kwargs)
 
 
 class ThreadPoolWithStats(threadpool.ThreadPool, log.Logger):
@@ -216,7 +220,10 @@ class ThreadPoolWithStats(threadpool.ThreadPool, log.Logger):
         log.Logger.__init__(self, logger)
         threadpool.ThreadPool.__init__(
             self, minthreads, maxthreads, name="Django")
-        self._stats = statistics is not None and IThreadStatistics(statistics)
+        self._stats = None
+        if statistics:
+            self._stats = IThreadStatistics(statistics)
+
         if reactor is None:
             from twisted.internet import reactor
         self._reactor = reactor
@@ -224,11 +231,13 @@ class ThreadPoolWithStats(threadpool.ThreadPool, log.Logger):
     def callInThreadWithCallback(self, onResult, func, *args, **kw):
         job_explanation = kw.pop('job_explanation', None) or \
                           reflect.canonical_name(func)
-        if not self.joined and self._stats:
+        if self.joined:
+            return
+        if self._stats:
             job_id = str(uuid.uuid1())
             self._stats.new_item(job_id, job_explanation)
+            kw['__threadpool_job_id'] = job_id
 
-        kw['__threadpool_job_id'] = job_id
         threadpool.ThreadPool.callInThreadWithCallback(
             self, onResult, func, *args, **kw)
 
@@ -250,23 +259,23 @@ class ThreadPoolWithStats(threadpool.ThreadPool, log.Logger):
         from the threadpool, run it, and proceed to the next task until
         threadpool is stopped.
         """
-
-
         ct = self.currentThread()
         ct.reactor = self._reactor
         ct.stats = self._stats
-        ct.call_stats('new_thread')
+        if self._stats:
+            self._stats.new_thread()
 
         o = self.q.get()
         while o is not threadpool.WorkerStop:
             self.working.append(ct)
             ctx, function, args, kwargs, onResult = o
-            job_id = kwargs.pop('__threadpool_job_id')
-            ctx['__threadpool_job_id'] = job_id
+            job_id = kwargs.pop('__threadpool_job_id', None)
+            if job_id:
+                ctx['__threadpool_job_id'] = job_id
             del o
 
             try:
-                ct.call_stats('started_item', job_id)
+                ct.call_stats('started_item', job_id=job_id)
                 result = context.call(ctx, function, *args, **kwargs)
                 success = True
             except:
@@ -279,7 +288,7 @@ class ThreadPoolWithStats(threadpool.ThreadPool, log.Logger):
                     result = failure.Failure()
 
             del function, args, kwargs
-            ct.call_stats('finished_item', job_id)
+            ct.call_stats('finished_item', job_id=job_id)
 
             self.working.remove(ct)
 
@@ -293,4 +302,5 @@ class ThreadPoolWithStats(threadpool.ThreadPool, log.Logger):
             self.waiters.remove(ct)
 
         self.threads.remove(ct)
-        ct.call_stats('exit_thread')
+        if self._stats:
+            self._stats.exit_thread()

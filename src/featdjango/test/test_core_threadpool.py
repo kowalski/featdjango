@@ -1,17 +1,15 @@
 import Queue
 
-from twisted.python import failure
-
 from feat.common import defer
 from feat.test import common
 
 from featdjango.core import threadpool
 
 
-class ThreadpoolTest(common.TestCase):
+class _ThreadpoolTest(common.TestCase):
 
     def setUp(self):
-        self.stats = threadpool.MemoryThreadStatistics(self)
+        self.setup_stats()
         self.tp = threadpool.ThreadPoolWithStats(statistics=self.stats,
                                                  logger=self)
         self.tp.start()
@@ -80,45 +78,49 @@ class ThreadpoolTest(common.TestCase):
     def testDoingAsyncWork(self):
         res = yield self.do_async_work(4)
         self.assertEqual(4, res)
-        # check that the stats are processed
-        self.assertEqual(1, len(self.stats.finished))
-        self.assertEqual(0, len(self.stats.processing))
-        record = self.stats.finished[0]
-        self.assertEqual(1, len(record.naps))
-        self.assertIn('give_defer', record.naps[0].reason)
+        if self.stats:
+            # check that the stats are processed
+            self.assertEqual(1, len(self.stats.finished))
+            self.assertEqual(0, len(self.stats.processing))
+            record = self.stats.finished[0]
+            self.assertEqual(1, len(record.naps))
+            self.assertIn('give_defer', record.naps[0].reason)
 
         ex = AttributeError('attribute')
         d = self.do_async_work(ex)
         self.assertFailure(d, AttributeError)
         yield d
-        self.assertEqual(2, len(self.stats.finished))
-        self.assertEqual(0, len(self.stats.processing))
-        record = self.stats.finished[1]
-        self.assertEqual(1, len(record.naps))
-        self.assertIn('give_defer', record.naps[0].reason)
+        if self.stats:
+            self.assertEqual(2, len(self.stats.finished))
+            self.assertEqual(0, len(self.stats.processing))
+            record = self.stats.finished[1]
+            self.assertEqual(1, len(record.naps))
+            self.assertIn('give_defer', record.naps[0].reason)
 
     @defer.inlineCallbacks
     def testDoingSyncWork(self):
         finish, d = self.do_sync_work('some work')
-        self.assertEqual(1, len(self.stats.processing))
-        record = self.stats.processing.values()[0]
-        self.assertEqual('some work', record.explanation)
+        if self.stats:
+            self.assertEqual(1, len(self.stats.processing))
+            record = self.stats.processing.values()[0]
+            self.assertEqual('some work', record.explanation)
 
         finish(3)
         res = yield d
         self.assertEqual(3, res)
 
-        # check that we have minthreads thread running
-        self.assertEqual(self.tp.min, self.stats.threads)
+        if self.stats:
+            # check that we have minthreads thread running
+            self.assertEqual(self.tp.min, self.stats.threads)
 
-        # check that the stats are processed
-        self.assertEqual(1, len(self.stats.finished))
-        self.assertEqual(0, len(self.stats.processing))
-        record = self.stats.finished[0]
-        self.assertIsNot(None, record.created_timestamp)
-        self.assertIsNot(None, record.start_timestamp)
-        self.assertIsNot(None, record.finish_timestamp)
-        self.assertIsNot(None, record.duration)
+            # check that the stats are processed
+            self.assertEqual(1, len(self.stats.finished))
+            self.assertEqual(0, len(self.stats.processing))
+            record = self.stats.finished[0]
+            self.assertIsNot(None, record.created_timestamp)
+            self.assertIsNot(None, record.start_timestamp)
+            self.assertIsNot(None, record.finish_timestamp)
+            self.assertIsNot(None, record.duration)
 
     @defer.inlineCallbacks
     def testFailingJob(self):
@@ -127,14 +129,15 @@ class ThreadpoolTest(common.TestCase):
         self.assertFailure(d, ValueError)
         yield d
 
-        # check that the stats are processed
-        self.assertEqual(1, len(self.stats.finished))
-        self.assertEqual(0, len(self.stats.processing))
-        record = self.stats.finished[0]
-        self.assertIsNot(None, record.created_timestamp)
-        self.assertIsNot(None, record.start_timestamp)
-        self.assertIsNot(None, record.finish_timestamp)
-        self.assertIsNot(None, record.duration)
+        if self.stats:
+            # check that the stats are processed
+            self.assertEqual(1, len(self.stats.finished))
+            self.assertEqual(0, len(self.stats.processing))
+            record = self.stats.finished[0]
+            self.assertIsNot(None, record.created_timestamp)
+            self.assertIsNot(None, record.start_timestamp)
+            self.assertIsNot(None, record.finish_timestamp)
+            self.assertIsNot(None, record.duration)
 
     @defer.inlineCallbacks
     def testMoreJobsThanMax(self):
@@ -143,31 +146,47 @@ class ThreadpoolTest(common.TestCase):
 
         # first run a few
         control = [self.do_sync_work(str(x)) for x in range(less_than_max)]
-        self.assertEqual(less_than_max, len(self.stats.processing))
-        yield self.wait_for(lambda: self.stats.threads == less_than_max, 5,
-                            freq=0.01)
+        if self.stats:
+            self.assertEqual(less_than_max, len(self.stats.processing))
+            yield self.wait_for(lambda: self.stats.threads == less_than_max, 5,
+                                freq=0.01)
 
         # now run some more
         control.extend([self.do_sync_work(str(x))
                         for x in range(less_than_max, more_than_max)])
-        self.assertEqual(more_than_max, len(self.stats.processing))
-        yield self.wait_for(lambda: self.stats.threads == self.tp.max, 5,
-                            freq=0.01)
+        if self.stats:
+            self.assertEqual(more_than_max, len(self.stats.processing))
+            yield self.wait_for(lambda: self.stats.threads == self.tp.max, 5,
+                                freq=0.01)
 
         # now finish one
         finish, d = control.pop(0)
         finish(None)
         yield d
 
-        self.assertEqual(more_than_max - 1, len(self.stats.processing))
-        self.assertEqual(1, len(self.stats.finished))
-        self.assertEqual(self.tp.max, self.stats.threads)
+        if self.stats:
+            self.assertEqual(more_than_max - 1, len(self.stats.processing))
+            self.assertEqual(1, len(self.stats.finished))
+            self.assertEqual(self.tp.max, self.stats.threads)
 
         # finish all jobs
         for finish, d in control:
             finish(None)
             yield d
 
-        self.assertEqual(0, len(self.stats.processing))
-        self.assertEqual(more_than_max, len(self.stats.finished))
-        self.assertEqual(self.tp.max, self.stats.threads)
+        if self.stats:
+            self.assertEqual(0, len(self.stats.processing))
+            self.assertEqual(more_than_max, len(self.stats.finished))
+            self.assertEqual(self.tp.max, self.stats.threads)
+
+
+class TestWithoutStats(_ThreadpoolTest):
+
+    def setup_stats(self):
+        self.stats = None
+
+
+class TestWithStats(_ThreadpoolTest):
+
+    def setup_stats(self):
+        self.stats = threadpool.MemoryThreadStatistics(self)

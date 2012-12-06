@@ -56,11 +56,14 @@ class Server(webserver.Server):
         server_name = server_name or hostname
         self.threadpool = threadpool.ThreadPoolWithStats(
             logger=log_keeper, init_thread=self._init_thread)
-        self.threadpool.start()
 
         self.res = Root(self, server_name, prefix=prefix)
         # FIXME: server listens on all the interfaces
         webserver.Server.__init__(self, port, self.res, log_keeper=log_keeper)
+
+    def initiate(self):
+        self.threadpool.start()
+        return webserver.Server.initiate(self)
 
     def cleanup(self):
         self.info('Shutting down.')

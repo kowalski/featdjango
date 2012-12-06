@@ -69,3 +69,5 @@ class Command(BaseCommand):
             reactor.run()
         except KeyboardInterrupt:
             pass
+        if options.get('use_reloader'):
+            task.after_stop()

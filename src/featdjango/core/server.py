@@ -81,11 +81,11 @@ class FeatHttpRequest(HttpRequest):
         self._request = request
 
         self.path = request.path
-        if not self.path.endswith('/'):
-            self.path += '/'
         if prefix:
             self.path_info = '/' + '/'.join(
-                filter(None, self.path.split('/'))[len(prefix):]) + '/'
+                filter(None, self.path.split('/'))[len(prefix):])
+            if self.path.endswith('/'):
+                self.path_info += '/'
         else:
             self.path_info = self.path
 

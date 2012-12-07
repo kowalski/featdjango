@@ -49,7 +49,7 @@ class FeatHandler(BaseHandler):
 class Server(webserver.Server):
 
     def __init__(self, hostname, port, server_name='', log_keeper=None,
-                 prefix=None):
+                 prefix=None, interface='', **kwargs):
         self.hostname = hostname
 
         self._prefix = prefix
@@ -58,8 +58,8 @@ class Server(webserver.Server):
             logger=log_keeper, init_thread=self._init_thread)
 
         self.res = Root(self, server_name, prefix=prefix)
-        # FIXME: server listens on all the interfaces
-        webserver.Server.__init__(self, port, self.res, log_keeper=log_keeper)
+        webserver.Server.__init__(self, port, self.res, log_keeper=log_keeper,
+                                  interface=interface, **kwargs)
 
     def initiate(self):
         self.threadpool.start()

@@ -1,0 +1,22 @@
+# PREREQUIREMENTS: You should have the following modules enabled:
+# - mod_proxy
+# - mod_proxy_http
+# - mod_rewrite
+
+RewriteEngine  on
+RewriteRule    ^/${PREFIX}t$  /${PREFIX}/  [R]
+
+# Serve static files directly from the apache.
+Alias /static/ ${STATIC_ROOT_FROM_SETTINGS_PY}
+<Directory ${STATIC_ROOT_FROM_SETTINGS_PY}>
+  Order deny,allow
+  Allow from all
+</Directory>
+
+# Setup the reverse proxy.
+<Location ${PREFIX}>
+  # retry=0 removes akward delay after restart of django application,
+  # when apache returns 503 even though django is already running
+  ProxyPass http://localhost:${PORT}/${PREFIX} retry=0
+  ProxyPassReverse http://localhost:${PORT}/${PREFIX}
+</Location>

@@ -1,0 +1,29 @@
+[application:featdjango]
+import: featdjango.application
+name: featdjango
+
+[agent:django_app]
+agent_type: django_agent
+descriptor.django_settings_module: "someapp.settings"
+descriptor.port: 8002
+
+# Only listens on localhost.
+descriptor.interface: "127.0.0.1"
+
+# # Override some environment variables.
+# descriptor.environment: {"ENV": "local"}
+
+# # Serve from some prefix.
+# descriptor.prefix: "/prefix"
+
+# # Setup elf type log file.
+# descriptor.elflog_path: "django_access.log"
+# descriptor.elflog_fields: "time date cs-method cs-uri bytes time-taken c-ip s-ip sc-status sc-comment cs-uri-stem cs-uri-query sc(Content-Type) cs(Accept)"
+
+# # Serve from SSL on django level (don't use this for apache reverse proxy)
+# descriptor.p12_path: ""
+# descriptor.check_client_cert: true
+
+# # Inject some paths to the python path in order to load django modules.
+# # Use it if you django project in not installed.
+# descriptor.python_path: ["/home/projects/credex.git/team/dev", "/home/projects/credex.git/team/dev/partner"]

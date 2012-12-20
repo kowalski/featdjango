@@ -6,17 +6,18 @@
 RewriteEngine  on
 RewriteRule    ^/${PREFIX}t$  /${PREFIX}/  [R]
 
-# Serve static files directly from the apache.
-Alias /static/ ${STATIC_ROOT_FROM_SETTINGS_PY}
+### Serve static files directly from the apache. ###
+Alias /${PREFIX}/static/ ${STATIC_ROOT_FROM_SETTINGS_PY}
 <Directory ${STATIC_ROOT_FROM_SETTINGS_PY}>
   Order deny,allow
   Allow from all
 </Directory>
 
-# Setup the reverse proxy.
-<Location ${PREFIX}>
-  # retry=0 removes akward delay after restart of django application,
-  # when apache returns 503 even though django is already running
-  ProxyPass http://localhost:${PORT}/${PREFIX} retry=0
-  ProxyPassReverse http://localhost:${PORT}/${PREFIX}
-</Location>
+# let the requests for static files through
+ProxyPass /${PREFIX}/static !
+
+### Setup the reverse proxy. ###
+# retry=0 removes akward delay after restart of django application,
+# when apache returns 503 even though django is already running
+ProxyPass /${PREFIX} http://localhost:${PORT}/${PREFIX} retry=0
+ProxyPassReverse /${PREFIX} http://localhost:${PORT}/${PREFIX}

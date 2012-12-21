@@ -28,21 +28,20 @@ Features implemented:
 
 * Reloading of the code in development (by restarting the process).
 
+* Process the requests in threads.
+
+* Call methods returning Deferreds from inside the thread. The thread waits for the result.
+
+* Make it possible to serve the script with the global prefix.
+
+* Expose options to serve on HTTPS.
+
+* Create a feat agent running an application of choice.
 
 TODO:
 -----
 
-* Process the requests in threads.
-
-* Call methods returning Deferreds from inside the thread. The thread should wait for the result.
-
 * Track the statistics of how long the requests take to get processed and how long has the thread been sleeping due to waiting on the Deferreds.
-
-* Make it possible to serve the script with the global prefix.
-
-* Create a feat agent running an application of choice.
-
-* Expose options to serve on HTTPS.
 
 * Optionally listen on unix socket (instead of TCP) and test it with the same kind of integration as gunicorn.
 

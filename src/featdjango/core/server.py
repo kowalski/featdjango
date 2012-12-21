@@ -18,7 +18,7 @@ from feat.web import webserver, http
 
 from featdjango.core import threadpool
 
-from twisted.internet import reactor, threads
+from twisted.internet import reactor
 from twisted.web.http import stringToDatetime
 
 
@@ -73,8 +73,6 @@ class Server(webserver.Server):
     def _init_thread(self):
         if self._prefix:
             set_script_prefix(self._prefix)
-
-
 
 
 class FeatHttpRequest(HttpRequest):
@@ -288,6 +286,13 @@ class Static(object):
             raise http.NotFoundError()
 
         rst = os.stat(filepath)
+        age = time.time() - rst.st_mtime
+        date_header = http.compose_datetime(time.time())
+        response.set_header('date', date_header)
+        response.set_header('expires', date_header)
+        response.set_header('last-modified',
+                            http.compose_datetime(rst.st_mtime))
+        response.set_header('age', int(age))
 
         # FIXME: Caching Policy, should be extracted to a ICachingPolicy
         cache_control_header = request.get_header("cache-control") or ""
@@ -297,7 +302,7 @@ class Static(object):
         if not (u"no-cache" in cache_control or u"no-cache" in pragma):
             if u"max-age" in cache_control:
                 max_age = int(cache_control[u"max-age"])
-                if max_age == 0 or (time.time() - rst.st_mtime) < max_age:
+                if max_age == 0 or age < max_age:
                     response.set_status(http.Status.NOT_MODIFIED)
                     return
 

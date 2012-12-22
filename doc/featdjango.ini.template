@@ -10,7 +10,9 @@ descriptor.port: 8002
 # Only listens on localhost.
 descriptor.interface: "127.0.0.1"
 
-# # Override some environment variables.
+# # Override some environment variables. Note here, that if you are run
+# featdjango on http and use apache/nginx as a reverse proxy using HTTPS you
+# should set here HTTPS environment variable to "on".
 # descriptor.environment: {"ENV": "local"}
 
 # # Serve from some prefix.

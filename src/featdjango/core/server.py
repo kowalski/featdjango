@@ -15,6 +15,7 @@ from django.contrib.staticfiles import finders
 from django.utils import datastructures
 
 from feat.web import webserver, http
+from feat.common import defer
 
 from featdjango.core import threadpool
 
@@ -54,7 +55,7 @@ class Server(webserver.Server):
 
         self._prefix = prefix
         server_name = server_name or hostname
-        self.threadpool = threadpool.ThreadPoolWithStats(
+        self.threadpool = threadpool.ThreadPool(
             logger=log_keeper, init_thread=self._init_thread)
 
         self.res = Root(self, server_name, prefix=prefix)
@@ -67,8 +68,9 @@ class Server(webserver.Server):
 
     def cleanup(self):
         self.info('Shutting down.')
-        self.threadpool.stop()
-        return webserver.Server.cleanup(self)
+        d = webserver.Server.cleanup(self)
+        d.addCallback(defer.drop_param, self.threadpool.stop)
+        return d
 
     def _init_thread(self):
         if self._prefix:
@@ -216,7 +218,7 @@ class Root(object):
     def render_resource(self, request, response, location):
         django_request = FeatHttpRequest(
             request, self._name, self.server.port, self._prefix)
-        d = self.server.threadpool.deferToThread(
+        d = self.server.threadpool.defer_to_thread(
             self._handler.get_response, django_request)
         d.addCallback(self._translate_response, response)
         return d
@@ -323,7 +325,7 @@ class Static(object):
 
         response.do_not_cache()
 
-        return self.server.threadpool.deferToThread(
+        return self.server.threadpool.defer_to_thread(
             self._write_resource, response, res)
 
     def render_error(self, request, response, error):

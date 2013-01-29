@@ -38,6 +38,8 @@ Features implemented:
 
 * Create a feat agent running an application of choice.
 
+* Track when request goes away, cancel the processing when that happens.
+
 TODO:
 -----
 
@@ -45,4 +47,4 @@ TODO:
 
 * Optionally listen on unix socket (instead of TCP) and test it with the same kind of integration as gunicorn.
 
-* Track when request goes away, cancel the processing when that happens.
+

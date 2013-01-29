@@ -1,3 +1,4 @@
+import threading
 import Queue
 
 from feat.common import defer
@@ -6,17 +7,20 @@ from feat.test import common
 from featdjango.core import threadpool
 
 
-class _ThreadpoolTest(common.TestCase):
+defer.Deferred.debug = True
+
+
+class _Base(object):
 
     def setUp(self):
         self.setup_stats()
-        self.tp = threadpool.ThreadPoolWithStats(statistics=self.stats,
-                                                 logger=self)
+        self.tp = threadpool.ThreadPool(statistics=self.stats, logger=self,
+                                        kill_delay=0.1)
         self.tp.start()
         self.defers = list()
 
     def tearDown(self):
-        self.tp.stop()
+        return self.tp.stop()
 
     def do_sync_work(self, explanation=None):
         q = Queue.Queue(1)
@@ -28,7 +32,7 @@ class _ThreadpoolTest(common.TestCase):
             else:
                 return res
 
-        d = self.tp.deferToThread(body, job_explanation=explanation)
+        d = self.tp.defer_to_thread(body, job_explanation=explanation)
 
         def finish(result):
             q.put(result)
@@ -46,8 +50,62 @@ class _ThreadpoolTest(common.TestCase):
         def body():
             return threadpool.blocking_call(give_defer, result)
 
-        d = self.tp.deferToThread(body)
+        d = self.tp.defer_to_thread(body)
         return d
+
+    def testKillJobBeforeItStarts(self):
+
+        def body():
+            while True:
+                pass
+
+        d = self.tp.defer_to_thread(body)
+        # here we cancel right away, the task is likely not to have started yet
+        d.cancel()
+        self.assertFailure(d, defer.CancelledError)
+        return d
+
+    @defer.inlineCallbacks
+    def testKillJobWhichWillNotFinish(self):
+
+        started = threading.Event()
+
+        def body():
+            started.set()
+            while True:
+                pass
+
+        d = self.tp.defer_to_thread(body)
+        started.wait() # wait, to make sure the job starts
+        d.cancel()
+
+        self.assertFailure(d, defer.CancelledError)
+        yield d
+
+    @defer.inlineCallbacks
+    def testKillOnAnAsyncJob(self):
+
+        started = threading.Event()
+        ready = threading.Event()
+        called = False
+
+        def async():
+            called = True
+            return defer.succeed(None)
+
+        def body():
+            started.set()
+            # < ---- here the Deferred gets cancelled
+            ready.wait()
+            return threadpool.blocking_call(async)
+
+        d = self.tp.defer_to_thread(body)
+        started.wait() # wait, to make sure the job starts
+        d.cancel()
+        ready.set()
+        self.assertFailure(d, defer.CancelledError)
+        yield d
+        self.assertFalse(called)
 
     @defer.inlineCallbacks
     def testDoingAsyncCallFailsSynchronously(self):
@@ -58,7 +116,7 @@ class _ThreadpoolTest(common.TestCase):
         def body():
             return threadpool.blocking_call(call)
 
-        d = self.tp.deferToThread(body)
+        d = self.tp.defer_to_thread(body)
         self.assertFailure(d, AttributeError)
         yield d
 
@@ -71,7 +129,7 @@ class _ThreadpoolTest(common.TestCase):
         def body():
             return threadpool.blocking_call(call)
 
-        r = yield self.tp.deferToThread(body)
+        r = yield self.tp.defer_to_thread(body)
         self.assertEqual(5, r)
 
     @defer.inlineCallbacks
@@ -111,7 +169,7 @@ class _ThreadpoolTest(common.TestCase):
 
         if self.stats:
             # check that we have minthreads thread running
-            self.assertEqual(self.tp.min, self.stats.threads)
+            self.assertEqual(self.tp.min, self.tp.workers)
 
             # check that the stats are processed
             self.assertEqual(1, len(self.stats.finished))
@@ -180,13 +238,13 @@ class _ThreadpoolTest(common.TestCase):
             self.assertEqual(self.tp.max, self.stats.threads)
 
 
-class TestWithoutStats(_ThreadpoolTest):
+class TestWithoutStats(_Base, common.TestCase):
 
     def setup_stats(self):
         self.stats = None
 
 
-class TestWithStats(_ThreadpoolTest):
+class TestWithStats(_Base, common.TestCase):
 
     def setup_stats(self):
         self.stats = threadpool.MemoryThreadStatistics(self)

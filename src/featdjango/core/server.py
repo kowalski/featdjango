@@ -15,7 +15,7 @@ from django.contrib.staticfiles import finders
 from django.utils import datastructures
 
 from feat.web import webserver, http
-from feat.common import defer
+from feat.common import defer, log
 
 from featdjango.core import threadpool
 
@@ -55,6 +55,8 @@ class Server(webserver.Server):
 
         self._prefix = prefix
         server_name = server_name or hostname
+        if log_keeper is None:
+            log_keeper = log.get_default()
         self.threadpool = threadpool.ThreadPool(
             logger=log_keeper, init_thread=self._init_thread)
 

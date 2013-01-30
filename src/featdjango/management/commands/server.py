@@ -58,6 +58,7 @@ class Command(BaseCommand):
         logger = logging.getLogger('feat')
         if options.get('featlog'):
             log.FluLogKeeper.init(options['featlog'])
+            log.set_default(log.FluLogKeeper())
         else:
             log.set_default(log.PythonLogKeeper(logger))
 

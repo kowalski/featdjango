@@ -416,6 +416,9 @@ class ThreadPool(log.Logger):
             finally:
                 self._can_queue_get.set()
         else:
+            self.debug("Cancelling job %s softly. It will be given %s seconds "
+                       "to finish or yield the control to the main thread.",
+                       job_id, self.kill_delay)
             thread.cancel_softly(job_id)
             self.kill_later(self.kill_delay, job_id)
 

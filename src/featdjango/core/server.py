@@ -220,8 +220,11 @@ class Root(object):
     def render_resource(self, request, response, location):
         django_request = FeatHttpRequest(
             request, self._name, self.server.port, self._prefix)
+        job_explanation = "%s %s" % (django_request.method,
+                                     django_request.get_full_path())
         d = self.server.threadpool.defer_to_thread(
-            self._handler.get_response, django_request)
+            self._handler.get_response, django_request,
+            job_explanation=job_explanation)
         d.addCallback(self._translate_response, response)
         return d
 

@@ -422,9 +422,10 @@ class ThreadPool(log.Logger):
             thread.cancel_softly(job_id)
             self.kill_later(self.kill_delay, job_id)
 
-    def kill_later(self, delay, job_id, *args):
+    def kill_later(self, delay, job_id, *args, **kwargs):
         if job_id not in self._kill_laters:
-            dc = self._reactor.callLater(delay, self.kill_job, job_id, *args)
+            dc = self._reactor.callLater(delay, self.kill_job, job_id,
+                                         *args, **kwargs)
             self._kill_laters[job_id] = dc
 
     def kill_job(self, job_id, retry=0):

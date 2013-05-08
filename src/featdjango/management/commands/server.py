@@ -59,10 +59,13 @@ class Command(BaseCommand):
         if options.get('featlog'):
             log.FluLogKeeper.init(options['featlog'])
             log.set_default(log.FluLogKeeper())
-            log.debug('featdjango', 'Use feat logging: %s' % options['featlog'])
+            log.info('featdjango', 'Use feat logging: %s' % (
+                options['featlog'], ))
         else:
             log.set_default(log.PythonLogKeeper(logger))
-            log.debug('featdjango', 'Use python logging')
+            from feat.extern.log import log as flulog
+            flulog.setPackageScrubList('featcredex', 'featdjango', 'feat')
+            log.info('featdjango', 'Use python logging')
 
         log.info('featdjango', "Listening on %s:%s", self.addr, self.port)
 

@@ -59,10 +59,12 @@ class Command(BaseCommand):
         if options.get('featlog'):
             log.FluLogKeeper.init(options['featlog'])
             log.set_default(log.FluLogKeeper())
+            log.debug('featdjango', 'Use feat logging: %s' % options['featlog'])
         else:
             log.set_default(log.PythonLogKeeper(logger))
+            log.debug('featdjango', 'Use python logging')
 
-        log.info('feat', "Listening on %s:%s", self.addr, self.port)
+        log.info('featdjango', "Listening on %s:%s", self.addr, self.port)
 
         site = server.Server(self.addr, int(self.port),
                              prefix=options.get('prefix'))

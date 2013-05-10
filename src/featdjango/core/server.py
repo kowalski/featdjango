@@ -84,6 +84,7 @@ class FeatHttpRequest(HttpRequest):
     django.http.HttpRequest which can be understood by djanbo BaseHandler.'''
 
     def __init__(self, request, server_name='', server_port='', prefix=None):
+
         self._request = request
 
         self.path = request.path
@@ -110,6 +111,14 @@ class FeatHttpRequest(HttpRequest):
         # this attribute is required by _load_post_and_files() method defined
         # in the base class
         self._read_started = False
+
+        # added in 1.4
+        # FIXME: really we should chain up to the parent's init
+        #        the problem is we can't add our GET/POST/... properties when
+        #        they are set as attributes in base __init__
+        #        we could __init__, delete attributes, then set properties on
+        #        the class
+        self._post_parse_error = False
 
     def _get_post(self):
         if not hasattr(self, '_post'):

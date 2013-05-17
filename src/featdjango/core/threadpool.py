@@ -17,7 +17,7 @@ def blocking_call(_method, *args, **kwargs):
 def blocking_call_ex(method, args, kwargs):
     ct = threading.current_thread()
     if hasattr(ct, 'wait_for_defer'):
-        return ct.wait_for_defer(method, args, kwargs)
+        return ct.blocking_call(method, args, kwargs)
     else:
         return method(*args, **kwargs)
 
@@ -158,13 +158,23 @@ class MemoryThreadStatistics(log.Logger):
 
 class Thread(threading.Thread):
 
-    def wait_for_defer(self, method, args=tuple(), kwargs=dict()):
+    def call_async(self, method, args=tuple(), kwargs=dict()):
+        '''
+        Trigger calling method in the main application thread and return the
+        Deferred object as the handle.
+        '''
         if self._softly_cancelled == self.job_id:
             raise defer.CancelledError()
 
-        self.reactor.callFromThread(
-            self._blocking_call_body, method, args, kwargs)
-        self.call_stats('fallen_asleep', reflect.canonical_name(method))
+        self.reactor.callFromThread(self._call_async, method, args, kwargs)
+        return self._defer_queue.get()
+
+    def wait_for_defer(self, deferred, reason=None):
+        if self._softly_cancelled == self.job_id:
+            raise defer.CancelledError()
+        self.reactor.callFromThread(self._wait_for_defer, deferred)
+
+        self.call_stats('fallen_asleep', reason)
         res = self._defer_queue.get()
         self.call_stats('woken_up')
 
@@ -172,6 +182,10 @@ class Thread(threading.Thread):
             raise res
         else:
             return res
+
+    def blocking_call(self, method, args=tuple(), kwargs=dict()):
+        return self.wait_for_defer(self.call_async(method, args, kwargs),
+                                   reason=reflect.canonical_name(method))
 
     def run(self):
         try:
@@ -197,20 +211,24 @@ class Thread(threading.Thread):
         if self.job_id == job_id:
             self._softly_cancelled = job_id
 
-    ### private ###
+    ### private methods running in the main application thread ###
 
-    def _blocking_call_body(self, method, args, kwargs):
+    def _call_async(self, method, args, kwargs):
         try:
             r = method(*args, **kwargs)
-        except Exception as e:
-            self._blocking_call_cb(e)
+        except:
+            self._defer_queue.put(defer.fail())
             return
-
         if not isinstance(r, defer.Deferred):
-            self._blocking_call_cb(r)
+            self._defer_queue.put(defer.succeed(r))
+            return
+        self._defer_queue.put(r)
+
+    def _wait_for_defer(self, deferred):
+        if not isinstance(deferred, defer.Deferred):
+            self._blocking_call_cb(deferred)
         else:
-            r.addBoth(self._blocking_call_cb)
-            return r
+            deferred.addBoth(self._blocking_call_cb)
 
     def _blocking_call_cb(self, result):
         if isinstance(result, failure.Failure):

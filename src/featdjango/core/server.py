@@ -83,19 +83,17 @@ class FeatHttpRequest(HttpRequest):
     '''Adapter of feat.web.webserver.Request to the sublcass of
     django.http.HttpRequest which can be understood by djanbo BaseHandler.'''
 
-    def __init__(self, request, server_name='', server_port='', prefix=None):
+    def __init__(self, request, location,
+                 server_name='', server_port='', prefix=None):
 
         self._request = request
 
-        self.path = request.path
+        self.path = '/'.join(location)
+
         if prefix:
-            self.path_info = '/' + '/'.join(
-                filter(None, self.path.split('/'))[len(prefix):])
-            if self.path.endswith('/'):
-                self.path_info += '/'
+            self.path_info = '/' + '/'.join(location[len(prefix) + 1:])
         else:
             self.path_info = self.path
-
 
         self.method = request.method.name
         self._server_name = server_name
@@ -223,12 +221,12 @@ class Root(object):
         if remaining[:l] == self._static_path:
             return self._static, remaining[l:]
         if self._prefix and remaining[:len(self._prefix)] != self._prefix:
-            return
+            return self, self._prefix + remaining
         return self
 
     def render_resource(self, request, response, location):
         django_request = FeatHttpRequest(
-            request, self._name, self.server.port, self._prefix)
+            request, location, self._name, self.server.port, self._prefix)
         job_explanation = "%s %s" % (django_request.method,
                                      django_request.get_full_path())
         d = self.server.threadpool.defer_to_thread(

@@ -1,3 +1,5 @@
+import os
+import sys
 import re
 import logging
 from optparse import make_option
@@ -7,6 +9,7 @@ from featdjango.core import server, reloader
 from feat.common import log
 
 from django.core.management.base import BaseCommand, CommandError
+from django.utils import autoreload
 
 from twisted.internet import reactor
 
@@ -69,18 +72,28 @@ class Command(BaseCommand):
 
         log.info('featdjango', "Listening on %s:%s", self.addr, self.port)
 
-        site = server.Server(self.addr, int(self.port),
-                             prefix=options.get('prefix'))
-        reactor.callWhenRunning(site.initiate)
-        reactor.addSystemEventTrigger('before', 'shutdown', site.cleanup)
+        if os.environ.get("RUN_MAIN") == 'true':
+            # this is how django autoreloader lets the child process know
+            # that its a child process
+            site = server.Server(self.addr, int(self.port),
+                                 prefix=options.get('prefix'))
+            reactor.callWhenRunning(site.initiate)
+            reactor.addSystemEventTrigger('before', 'shutdown', site.cleanup)
 
-        if options.get('use_reloader'):
-            task = reloader.Reloader(reactor, site)
-            reactor.callWhenRunning(task.run)
-        try:
-            reactor.run()
-        except KeyboardInterrupt:
-            pass
-        else:
             if options.get('use_reloader'):
-                task.after_stop()
+                task = reloader.Reloader(reactor, site)
+                reactor.callWhenRunning(task.run)
+
+            reactor.run()
+
+            if options.get('use_reloader'):
+                if task.should_reload:
+                    sys.exit(3)
+        else:
+            # in the original process we just spawn the child worker as
+            # many times as it tells us to
+            try:
+                while autoreload.restart_with_reloader() == 3:
+                    pass
+            except KeyboardInterrupt:
+                pass

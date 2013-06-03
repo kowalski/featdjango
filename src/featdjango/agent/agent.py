@@ -96,9 +96,6 @@ class DjangoAgent(agent.Standalone):
                                        interface=desc.interface,
                                        security_policy=security_policy,
                                        server_stats=stats)
-
-    @replay.journaled
-    def startup(self, state):
         return fiber.wrap_defer(state.server.initiate)
 
     @replay.mutable

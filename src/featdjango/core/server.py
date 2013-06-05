@@ -16,6 +16,7 @@ from django.utils import datastructures
 
 from feat.web import webserver, http
 from feat.common import defer, log
+from feat.common.text_helper import format_block
 
 from featdjango.core import threadpool
 
@@ -182,6 +183,40 @@ class FeatHttpRequest(HttpRequest):
         self.META['SERVER_PORT'] = self._server_port
 
 
+class PrefixMessage404(object):
+
+    implements(webserver.IWebResource)
+
+    def __init__(self, prefix):
+        self._prefix = prefix
+
+        self.authenticator = None
+        self.authorizer = None
+
+
+    def is_method_allowed(self, request, location, method):
+        # method validation is performed by django
+        return True
+
+    def render_resource(self, request, response, location):
+        response.set_mime_type('text/html')
+        response.set_status(http.Status[404])
+        response.write(format_block('''
+        <html>
+        <body>
+        <h1>This server is configured to run under /%(prefix)s prefix.</h1>
+        You should use <a href="/%(url)s">this url</a>.
+        </body>
+        </html>''') % dict(prefix='/'.join(self._prefix),
+                           url="/".join(self._prefix + location[1:])))
+
+    def locate_resource(self, request, location, remaining):
+        return self
+
+    def render_error(self, request, response, error):
+        return error
+
+
 class Root(object):
 
     implements(webserver.IWebResource)
@@ -221,7 +256,7 @@ class Root(object):
         if remaining[:l] == self._static_path:
             return self._static, remaining[l:]
         if self._prefix and remaining[:len(self._prefix)] != self._prefix:
-            return self, self._prefix + remaining
+            return PrefixMessage404(self._prefix)
         return self
 
     def render_resource(self, request, response, location):

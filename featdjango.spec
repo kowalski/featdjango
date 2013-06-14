@@ -2,12 +2,12 @@
 
 %{!?python_sitelib: %define python_sitelib %(%{__python} -c "from distutils.sysconfig import get_python_lib; print get_python_lib()")}
 %{!?pyver: %define pyver %(%{__python} -c "import sys ; print sys.version[:3]")}
-%define version 0.2.0
+%define version 0.2.1
 
 Name:           python-featdjango
 Summary:        F3AT Django integration
 Version:        %{version}
-Release:        1%{?dist}
+Release:        0.1%{?dist}
 Source0:        featdjango-%{version}.tar.gz
 
 Group:          Development/Languages

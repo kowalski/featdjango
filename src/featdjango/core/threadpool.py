@@ -172,6 +172,7 @@ class Thread(threading.Thread):
     def wait_for_defer(self, deferred, reason=None):
         if self._softly_cancelled == self.job_id:
             raise defer.CancelledError()
+
         self.reactor.callFromThread(self._wait_for_defer, deferred)
 
         self.call_stats('fallen_asleep', reason)
@@ -194,6 +195,7 @@ class Thread(threading.Thread):
             self.reactor = None
             self.job_id = None
             self._softly_cancelled = None
+            self._waiting_on_defer = None
             super(Thread, self).run()
         finally:
             del self._defer_queue
@@ -210,6 +212,10 @@ class Thread(threading.Thread):
     def cancel_softly(self, job_id):
         if self.job_id == job_id:
             self._softly_cancelled = job_id
+            if self._waiting_on_defer:
+                d = self._waiting_on_defer
+                self._waiting_on_defer = None
+                d.cancel()
 
     ### private methods running in the main application thread ###
 
@@ -228,9 +234,11 @@ class Thread(threading.Thread):
         if not isinstance(deferred, defer.Deferred):
             self._blocking_call_cb(deferred)
         else:
+            self._waiting_on_defer = deferred
             deferred.addBoth(self._blocking_call_cb)
 
     def _blocking_call_cb(self, result):
+        self._waiting_on_defer = None
         if isinstance(result, failure.Failure):
             self._defer_queue.put(result.value)
         else:
@@ -304,7 +312,7 @@ class ThreadPool(log.Logger):
         self._can_queue_get.set()
 
         # how much time to give a job to finish nicely
-        # killing it by lethal injections
+        # before killing it by lethal injections
         self.kill_delay = kill_delay
         # how many times try to retry the death sentence before
         # admitting defeat

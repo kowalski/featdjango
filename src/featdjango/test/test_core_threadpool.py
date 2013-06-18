@@ -66,6 +66,32 @@ class _Base(object):
         return d
 
     @defer.inlineCallbacks
+    def testKillJobWaitingOnAsyncCall(self):
+
+        nested_defer = defer.Deferred()
+        reached_here = False
+
+        def body():
+            r = threadpool.blocking_call(async_job)
+            reached_here = True
+            return r
+
+        def async_job():
+            return nested_defer
+
+        d = self.tp.defer_to_thread(body)
+        yield common.delay(None, 0.3)
+        d.cancel()
+
+        self.assertFailure(d, defer.CancelledError)
+        yield d
+
+        self.assertFalse(reached_here)
+
+        # this should cancel the deferred we were waiting on
+        self.assertTrue(nested_defer.called)
+
+    @defer.inlineCallbacks
     def testKillJobWhichWillNotFinish(self):
 
         started = threading.Event()

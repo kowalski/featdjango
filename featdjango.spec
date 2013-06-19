@@ -7,7 +7,7 @@
 Name:           python-featdjango
 Summary:        F3AT Django integration
 Version:        %{version}
-Release:        0.1%{?dist}
+Release:        0.2%{?dist}
 Source0:        featdjango-%{version}.tar.gz
 
 Group:          Development/Languages

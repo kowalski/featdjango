@@ -7,6 +7,7 @@ from optparse import make_option
 from featdjango.core import server, reloader
 
 from feat.common import log
+from feat.web import webserver
 
 from django.core.management.base import BaseCommand, CommandError
 from django.utils import autoreload
@@ -20,6 +21,9 @@ naiveip_re = re.compile(r"""^(?:
     (?P<fqdn>[a-zA-Z0-9-]+(?:\.[a-zA-Z0-9-]+)*) # FQDN
 ):)?(?P<port>\d+)$""", re.X)
 DEFAULT_PORT = "8000"
+DEFAULT_ELF_FORMAT = ("time date cs-method cs-uri bytes time-taken c-ip "
+                      "s-ip sc-status sc-comment cs-uri-stem cs-uri-query"
+                      " sc(Content-Type) cs(Accept)")
 
 
 class Command(BaseCommand):
@@ -31,7 +35,13 @@ class Command(BaseCommand):
                     default=True,
                     help='Tells Django to NOT use the auto-reloader.'),
         make_option('--prefix', action='store', dest='prefix',
-                    help='Run application under a prefix (example: "/myapp")'))
+                    help='Run application under a prefix (example: "/myapp")'),
+        make_option('--elflog_path', action='store', dest='elflog_path',
+                    help='Specify to create an ELF log file.'),
+        make_option('--elflog_fields', action='store', dest='elflog_fields',
+                    help='Format of ELF log fields.',
+                    default=DEFAULT_ELF_FORMAT),
+        )
 
 
     # Validation is called explicitly each time the server is reloaded.
@@ -75,8 +85,15 @@ class Command(BaseCommand):
         if os.environ.get("RUN_MAIN") == 'true':
             # this is how django autoreloader lets the child process know
             # that its a child process
+            if options.get('elflog_path'):
+                stats = webserver.ELFLog(options.get('elflog_path'),
+                                         options.get('elflog_fields'))
+            else:
+                stats = None
+
             site = server.Server(self.addr, int(self.port),
-                                 prefix=options.get('prefix'))
+                                 prefix=options.get('prefix'),
+                                 web_statistics=stats)
             reactor.callWhenRunning(site.initiate)
             reactor.addSystemEventTrigger('before', 'shutdown', site.cleanup)
 

@@ -15,7 +15,7 @@ from django.contrib.staticfiles import finders
 from django.utils import datastructures
 
 from feat.web import webserver, http
-from feat.common import defer, log
+from feat.common import defer, log, error
 from feat.common.text_helper import format_block
 
 from featdjango.core import threadpool
@@ -71,8 +71,13 @@ class Server(webserver.Server):
 
     def cleanup(self):
         self.info('Shutting down.')
-        d = webserver.Server.cleanup(self)
+        d = defer.succeed(self)
+        d.addCallback(webserver.Server.cleanup)
+        d.addErrback(defer.inject_param, 1, error.handle_failure,
+                     self, "Failure while shutting down webserver.")
         d.addCallback(defer.drop_param, self.threadpool.stop)
+        d.addErrback(defer.inject_param, 1, error.handle_failure,
+                     self, "Failure while stopping the threadpool.")
         return d
 
     def _init_thread(self):

@@ -124,6 +124,13 @@ class FeatHttpRequest(HttpRequest):
         #        the class
         self._post_parse_error = False
 
+    def read(self, *args, **kwargs):
+        self._read_started = True
+        # feat would decode the string by default
+        kwargs['decode'] = False
+        return self._stream.read(*args, **kwargs)
+
+
     def _get_post(self):
         if not hasattr(self, '_post'):
             self._load_post_and_files()

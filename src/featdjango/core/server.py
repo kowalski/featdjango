@@ -18,7 +18,7 @@ from feat.web import webserver, http
 from feat.common import defer, log, error
 from feat.common.text_helper import format_block
 
-from featdjango.core import threadpool
+from featdjango.core import threadpool, stats
 
 from twisted.internet import reactor
 from twisted.web.http import stringToDatetime
@@ -50,16 +50,22 @@ class FeatHandler(BaseHandler):
 
 class Server(webserver.Server):
 
-    def __init__(self, hostname, port, server_name='', log_keeper=None,
-                 prefix=None, interface='', **kwargs):
+    def __init__(self, hostname, port, server_name='',
+                 log_keeper=None, prefix=None, interface='',
+                 thread_stats_file=None, **kwargs):
         self.hostname = hostname
 
         self._prefix = prefix
         server_name = server_name or hostname
         if log_keeper is None:
             log_keeper = log.get_default()
+        if thread_stats_file:
+            self.thread_stats = stats.Statistics(log_keeper, thread_stats_file)
+        else:
+            self.thread_stats = None
         self.threadpool = threadpool.ThreadPool(
-            logger=log_keeper, init_thread=self._init_thread)
+            logger=log_keeper, init_thread=self._init_thread,
+            statistics=self.thread_stats)
 
         self.res = Root(self, server_name, prefix=prefix)
         webserver.Server.__init__(self, port, self.res, log_keeper=log_keeper,
@@ -129,7 +135,6 @@ class FeatHttpRequest(HttpRequest):
         # feat would decode the string by default
         kwargs['decode'] = False
         return self._stream.read(*args, **kwargs)
-
 
     def _get_post(self):
         if not hasattr(self, '_post'):
@@ -204,7 +209,6 @@ class PrefixMessage404(object):
 
         self.authenticator = None
         self.authorizer = None
-
 
     def is_method_allowed(self, request, location, method):
         # method validation is performed by django
@@ -384,8 +388,10 @@ class Static(object):
 
         response.do_not_cache()
 
+        expl = "%s %s" % (request.method.name, request.path)
         return self.server.threadpool.defer_to_thread(
-            self._write_resource, response, res)
+            self._write_resource, response, res,
+            job_explanation=expl)
 
     def render_error(self, request, response, error):
         return error

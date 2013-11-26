@@ -41,6 +41,8 @@ class Command(BaseCommand):
         make_option('--elflog_fields', action='store', dest='elflog_fields',
                     help='Format of ELF log fields.',
                     default=DEFAULT_ELF_FORMAT),
+        make_option('--stats', action='store', dest='stats_file',
+                    help='Path to the file to store the worker statistics in'),
         )
 
 
@@ -93,7 +95,8 @@ class Command(BaseCommand):
 
             site = server.Server(self.addr, int(self.port),
                                  prefix=options.get('prefix'),
-                                 web_statistics=stats)
+                                 web_statistics=stats,
+                                 thread_stats_file=options.get('stats_file'))
             reactor.callWhenRunning(site.initiate)
             reactor.addSystemEventTrigger('before', 'shutdown', site.cleanup)
 

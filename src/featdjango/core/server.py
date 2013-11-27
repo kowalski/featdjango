@@ -17,8 +17,9 @@ from django.utils import datastructures
 from feat.web import webserver, http
 from feat.common import defer, log, error
 from feat.common.text_helper import format_block
+from feat.gateway import resources
 
-from featdjango.core import threadpool, stats
+from featdjango.core import threadpool, stats, api
 
 from twisted.internet import reactor
 from twisted.web.http import stringToDatetime
@@ -52,7 +53,7 @@ class Server(webserver.Server):
 
     def __init__(self, hostname, port, server_name='',
                  log_keeper=None, prefix=None, interface='',
-                 thread_stats_file=None, **kwargs):
+                 apiprefix=None, thread_stats_file=None, **kwargs):
         self.hostname = hostname
 
         self._prefix = prefix
@@ -67,13 +68,17 @@ class Server(webserver.Server):
             logger=log_keeper, init_thread=self._init_thread,
             statistics=self.thread_stats)
 
-        self.res = Root(self, server_name, prefix=prefix)
+        self.res = Root(self, server_name, prefix=prefix, apiprefix=apiprefix)
         webserver.Server.__init__(self, port, self.res, log_keeper=log_keeper,
                                   interface=interface, **kwargs)
 
     def initiate(self):
         self.threadpool.start()
-        return webserver.Server.initiate(self)
+        webserver.Server.initiate(self)
+        from feat.models import texthtml, applicationjson
+        self.enable_mime_type(texthtml.MIME_TYPE)
+        self.enable_mime_type(applicationjson.MIME_TYPE)
+        self.enable_mime_type('image/png')
 
     def cleanup(self):
         self.info('Shutting down.')
@@ -237,7 +242,7 @@ class Root(object):
 
     implements(webserver.IWebResource)
 
-    def __init__(self, server, name, prefix=None):
+    def __init__(self, server, name, prefix=None, apiprefix=None):
         self.server = server
         self.authenticator = None
         self.authorizer = None
@@ -253,6 +258,17 @@ class Root(object):
         from django.conf import settings
         self._static_path = tuple(filter(None, settings.STATIC_URL.split('/')))
         self._static = Static(self.server)
+
+        self._apiprefix = None
+        if apiprefix:
+            self._apiprefix = tuple(filter(None, apiprefix.split('/')))
+
+        if self._apiprefix:
+            self._api = api.Model(self.server)
+            self._api.initiate(aspect=api.RootAspect())
+            # to be created once we are listening thus knowing the port
+            self._featstatic = None
+            self._api_resource = None
 
     def set_inherited(self, authenticator=None, authorizer=None):
         self.authenticator = authenticator
@@ -271,6 +287,29 @@ class Root(object):
         l = len(self._static_path)
         if remaining[:l] == self._static_path:
             return self._static, remaining[l:]
+
+        if (self._apiprefix and
+            remaining[:len(self._prefix)] == self._apiprefix):
+            if self._api_resource is None:
+                self._api_resource = resources.ModelResource(
+                    self._api, 'api',
+                    names=[(self.server.host, self.server.port)],
+                    )
+                res = self._api_resource.initiate()
+            else:
+                res = self._api_resource
+
+            return res, remaining[1:]
+
+        # serve static files of feat from /static
+        if self._apiprefix and remaining[0] == 'static':
+            if not self._featstatic:
+                from feat.configure import configure
+                self._featstatic = resources.StaticResource(
+                    self.server.host, self.server.port, configure.gatewaydir)
+
+            return self._featstatic, remaining[1:]
+
         if self._prefix and remaining[:len(self._prefix)] != self._prefix:
             return PrefixMessage404(self._prefix)
         return self

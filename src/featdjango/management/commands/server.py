@@ -43,6 +43,8 @@ class Command(BaseCommand):
                     default=DEFAULT_ELF_FORMAT),
         make_option('--stats', action='store', dest='stats_file',
                     help='Path to the file to store the worker statistics in'),
+        make_option('--apiprefix', action='store', dest='apiprefix',
+                    help='Prefix under which to host the server gateway api'),
         )
 
 
@@ -70,6 +72,10 @@ class Command(BaseCommand):
         if not self.addr:
             self.addr = '127.0.0.1'
 
+        if options.get('apiprefix') and not options.get('prefix'):
+            raise CommandError("--apiprefix can only be used in conjuction "
+                               "with --prefix. ")
+
         logger = logging.getLogger('feat')
         if options.get('featlog'):
             log.FluLogKeeper.init(options['featlog'])
@@ -95,6 +101,7 @@ class Command(BaseCommand):
 
             site = server.Server(self.addr, int(self.port),
                                  prefix=options.get('prefix'),
+                                 apiprefix=options.get('apiprefix'),
                                  web_statistics=stats,
                                  thread_stats_file=options.get('stats_file'))
             reactor.callWhenRunning(site.initiate)

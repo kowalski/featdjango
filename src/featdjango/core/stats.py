@@ -41,16 +41,21 @@ class SqliteStorage(object):
         self._processing = True
         d = defer.Deferred()
         reactor.callFromThread(d.callback, None)
+        d.addCallback(defer.drop_param, self.get_db)
+        d.addCallback(defer.drop_param, self._flush_next)
+        d.addBoth(defer.bridge_param, self._finished_processing)
+        d.addErrback(self._error_handler)
+
+    @defer.ensure_async
+    def get_db(self):
         if self._db is None:
             self._db = adbapi.ConnectionPool('sqlite3', self._filename,
                                          cp_min=1, cp_max=1, cp_noisy=True,
                                          check_same_thread=False,
                                          timeout=10)
-
-            d.addCallback(defer.drop_param, self._check_schema)
-        d.addCallback(defer.drop_param, self._flush_next)
-        d.addBoth(defer.bridge_param, self._finished_processing)
-        d.addErrback(self._error_handler)
+            return self._check_schema()
+        else:
+            return self._db
 
     def _finished_processing(self):
         self._processing = False
@@ -63,7 +68,7 @@ class SqliteStorage(object):
         d = self._db.runQuery(
             'SELECT method FROM processed_requests LIMIT 1')
         d.addErrback(self._create_schema)
-        d.addCallback(defer.override_result, None)
+        d.addCallback(defer.override_result, self._db)
         return d
 
     def _create_schema(self, fail):

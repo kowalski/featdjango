@@ -3,10 +3,11 @@ import sys
 import mimetypes
 import datetime
 import time
+from threading import Lock
 
 from zope.interface import implements
-
-from threading import Lock
+from twisted.internet import reactor
+from twisted.web.http import stringToDatetime
 
 from django.core.handlers.base import BaseHandler
 from django.core.urlresolvers import set_script_prefix
@@ -19,10 +20,9 @@ from feat.common import defer, log, error
 from feat.common.text_helper import format_block
 from feat.gateway import resources
 
-from featdjango.core import threadpool, stats, api
+from feat.models.interface import IAspect
 
-from twisted.internet import reactor
-from twisted.web.http import stringToDatetime
+from featdjango.core import threadpool, stats, api
 
 
 class FeatHandler(BaseHandler):
@@ -75,10 +75,11 @@ class Server(webserver.Server):
     def initiate(self):
         self.threadpool.start()
         webserver.Server.initiate(self)
-        from feat.models import texthtml, applicationjson
-        self.enable_mime_type(texthtml.MIME_TYPE)
-        self.enable_mime_type(applicationjson.MIME_TYPE)
-        self.enable_mime_type('image/png')
+        if self.res._apiprefix:
+            from feat.models import texthtml, applicationjson
+            self.enable_mime_type(texthtml.MIME_TYPE)
+            self.enable_mime_type(applicationjson.MIME_TYPE)
+            self.enable_mime_type('image/png', 1)
 
     def cleanup(self):
         self.info('Shutting down.')
@@ -238,6 +239,14 @@ class PrefixMessage404(object):
         return error
 
 
+class RootAspect(object):
+
+    implements(IAspect)
+    name = 'root'
+    label = 'Worker gateway'
+    desc = None
+
+
 class Root(object):
 
     implements(webserver.IWebResource)
@@ -264,8 +273,8 @@ class Root(object):
             self._apiprefix = tuple(filter(None, apiprefix.split('/')))
 
         if self._apiprefix:
-            self._api = api.Model(self.server)
-            self._api.initiate(aspect=api.RootAspect())
+            self._api = api.Server(self.server)
+            self._api.initiate(aspect=RootAspect())
             # to be created once we are listening thus knowing the port
             self._featstatic = None
             self._api_resource = None
@@ -293,7 +302,7 @@ class Root(object):
             if self._api_resource is None:
                 self._api_resource = resources.ModelResource(
                     self._api, 'api',
-                    names=[(self.server.host, self.server.port)],
+                    names=[(request.domain.split(':')[0], self.server.port)],
                     )
                 res = self._api_resource.initiate()
             else:
@@ -306,7 +315,8 @@ class Root(object):
             if not self._featstatic:
                 from feat.configure import configure
                 self._featstatic = resources.StaticResource(
-                    self.server.host, self.server.port, configure.gatewaydir)
+                    request.domain.split(':')[0],
+                    self.server.port, configure.gatewaydir)
 
             return self._featstatic, remaining[1:]
 

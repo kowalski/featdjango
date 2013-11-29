@@ -45,10 +45,10 @@ class TimelineGraph(object):
         set xlabel "Date"
         set xdata time
         set timefmt "%%s"
-        set xtics rotate by 90 offset 0,-4 out nomirror
-        set format x "%%Y/%%m/%%d"
+        set xtics rotate by 90 offset 0,-5 out nomirror
+        set format x "%%m/%%d %%H:%%M"
 
-        set ylabel "Waiting time"
+        set ylabel "Waiting time (s)"
         set title "%(title)s"
         plot "-" using 1:2 w point title "Waiting time"
         ''' % dict(title=self.title))

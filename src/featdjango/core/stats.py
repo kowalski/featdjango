@@ -6,6 +6,8 @@ from twisted.internet import reactor
 from twisted.enterprise import adbapi
 from zope.interface import implements
 
+from django.core import urlresolvers
+
 from feat.common import log, defer, error, text_helper
 from feat.agencies import journaler
 from featdjango.core import threadpool
@@ -20,7 +22,7 @@ class SqliteStorage(object):
 
         # [(created, started)]
         self._waiting_times = journaler.EntriesCache()
-        # [(method, path, started, finished)]
+        # [(method, viewname, started, finished)]
         self._jobs_done = journaler.EntriesCache()
 
     ### public methods for storing data ###
@@ -29,8 +31,8 @@ class SqliteStorage(object):
         self._waiting_times.append((created, started))
         self._next_tick()
 
-    def log_job_done(self, method, path, started, finished):
-        self._jobs_done.append((method, path, started, finished))
+    def log_job_done(self, method, viewname, started, finished):
+        self._jobs_done.append((method, viewname, started, finished))
         self._next_tick()
 
     ### private ###
@@ -79,7 +81,7 @@ class SqliteStorage(object):
             CREATE TABLE processed_requests (
               id INTEGER PRIMARY KEY AUTOINCREMENT,
               method VARCHAR(10) NOT NULL,
-              path VARCHAR(1000) NOT NULL,
+              viewname VARCHAR(1000) NOT NULL,
               started DATETIME NOT NULL,
               elapsed FLOAT NOT NULL
             )
@@ -92,7 +94,7 @@ class SqliteStorage(object):
             )
             """),
             ("CREATE INDEX processed_requestsx "
-             "ON processed_requests(method, path)"),
+             "ON processed_requests(method, viewname)"),
             ]
 
         def run_all(connection, commands):
@@ -119,10 +121,10 @@ def do_inserts(connection, waiting_times, jobs_done):
 
     try:
         entries = jobs_done.fetch()
-        for method, path, started, finished in entries:
+        for method, viewname, started, finished in entries:
             connection.execute("INSERT INTO processed_requests VALUES "
                                "(null, ?, ?, DATETIME(?, 'unixepoch'), ?)",
-                               (method, path, started, finished - started))
+                               (method, viewname, started, finished - started))
     finally:
         if entries:
             jobs_done.commit()
@@ -137,8 +139,6 @@ class Statistics(log.Logger):
     def __init__(self, log_keeper=None, filename=":memory:"):
         log.Logger.__init__(self, log_keeper or log.get_default())
 
-        # # (method, path) -> [(epoch_created, epoch_started, time_elapsed)]
-        # self.processed = dict()
         self.storage = SqliteStorage(filename)
 
         # job_id -> epoch_created
@@ -175,8 +175,13 @@ class Statistics(log.Logger):
             self.debug("Ignoring job_id %r which doesn't match the expected"
                        " pattern.", job_id)
             return
-        self.storage.log_job_done(match.group('method'),
-                                  match.group('path'), started, ctime)
+        try:
+            resolved = urlresolvers.resolve(match.group('path'))
+        except urlresolvers.Resolver404:
+            # this is not call to django view, ignore
+            pass
+        else:
+            self.storage.log_job_done(match.group('method'), resolved.view_name, started, ctime)
 
     def fallen_asleep(self, job_id, reason=None):
         pass

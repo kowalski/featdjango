@@ -87,7 +87,7 @@ class WaitingTimes(model.Model):
 
 
 params = timeparams + [
-    action.Param('path', value.String(), is_required=False),
+    action.Param('viewname', value.String(), is_required=False),
     action.Param('method', value.String(), is_required=False),
     ]
 
@@ -103,8 +103,9 @@ def source_item(item):
 class ProcessingTimes(model.Model):
 
     model.identity('featdjango.server.stats.processing_times.label')
-    model.attribute('path', value.String(), source_item(0))
-    model.attribute('count', value.Integer(), source_item(1))
+    model.attribute('method', value.String(), source_item(0))
+    model.attribute('viewname', value.String(), source_item(1))
+    model.attribute('count', value.Integer(), source_item(2))
 
 
 @featdjango.register_model
@@ -112,59 +113,62 @@ class ProcessingTimes(model.Model):
 
     model.identity('featdjango.server.stats.processing_times')
     model.collection(
-        'paths', child_names=call.model_call('get_paths'),
-        child_source=getter.model_get('get_count'),
+        'handlers', child_names=call.model_call('get_handlers'),
+        child_source=getter.model_get('lookup_path'),
         child_model="featdjango.server.stats.processing_times.label",
         meta=[('html-render', 'array, 4')],
         model_meta=[('html-render', 'array, 4')],
         )
 
-    def get_paths(self):
+    def get_handlers(self):
         d = self.source.storage.get_db()
         d.addCallback(query,
-                      'SELECT method || " " || path, count(*) '
-                      'FROM processed_requests GROUP BY method, path;')
-        d.addCallback(dict)
+                      'SELECT method, viewname, count(*) '
+                      'FROM processed_requests GROUP BY method, viewname;')
+        d.addCallback(lambda x: dict(((method, viewname), count) for method, viewname, count in x))
         d.addCallback(defer.keep_param, defer.inject_param, 2,
-                      setattr, self, '_paths')
-        d.addCallback(defer.call_param, 'keys')
+                      setattr, self, '_handlers')
+        d.addCallback(lambda x: [" ".join(key) for key in x.keys()])
         return d
 
-    def get_count(self, name):
-        if hasattr(self, '_paths'):
-            return name, self._paths.get(name, 0)
+    def lookup_path(self, name):
+        key = name.split(" ", 1)
+        if len(key) != 2:
+            return
+        if hasattr(self, '_handlers'):
+            return key[0], key[1], self._handlers.get(tuple(key), 0)
 
     @get_graph('timeline', params)
-    def timeline_graph(self, method=None, path=None,
+    def timeline_graph(self, method=None, viewname=None,
                        start_date=None, end_date=None):
-        d = self._get_processing_times(method, path, start_date, end_date)
+        d = self._get_processing_times(method, viewname, start_date, end_date)
         title = ''
-        if path:
+        if viewname:
             if method:
-                title = "%s %s" % (method, path)
+                title = "%s %s" % (method, viewname)
             else:
-                title = path
+                title = viewname
         d.addCallback(graph.TimelineGraph, title)
         return d
 
     @get_graph('histogram', params)
-    def histogram_graph(self, method=None, path=None,
+    def histogram_graph(self, method=None, viewname=None,
                        start_date=None, end_date=None):
-        d = self._get_processing_times(method, path, start_date, end_date)
+        d = self._get_processing_times(method, viewname, start_date, end_date)
         title = ''
-        if path:
+        if viewname:
             if method:
-                title = "%s %s" % (method, path)
+                title = "%s %s" % (method, viewname)
             else:
-                title = path
+                title = viewname
         d.addCallback(graph.Histogram, title, barwidth=0.05)
         return d
 
-    def _get_processing_times(self, method, path, start_date, end_date):
+    def _get_processing_times(self, method, viewname, start_date, end_date):
         conditions, params = _parse_time_params(start_date, end_date)
-        if path:
-            conditions.append("path == ?")
-            params.append(path)
+        if viewname:
+            conditions.append("viewname == ?")
+            params.append(viewname)
 
         if method:
             conditions.append("method == ?")

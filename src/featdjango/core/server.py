@@ -327,8 +327,7 @@ class Root(object):
     def render_resource(self, request, response, location):
         django_request = FeatHttpRequest(
             request, location, self._name, self.server.port, self._prefix)
-        job_explanation = "%s %s" % (django_request.method,
-                                     django_request.get_full_path())
+        job_explanation = "%s %s" % (django_request.method, django_request.path_info)
         d = self.server.threadpool.defer_to_thread(
             self._handler.get_response, django_request,
             job_explanation=job_explanation)

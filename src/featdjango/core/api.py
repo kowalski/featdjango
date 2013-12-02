@@ -51,6 +51,17 @@ class WaitingTimes(model.Model):
 
     @get_graph('timeline', timeparams)
     def timeline_graph(self, start_date=None, end_date=None):
+        d = self._get_waiting_times(start_date, end_date)
+        d.addCallback(graph.TimelineGraph)
+        return d
+
+    @get_graph('histogram', timeparams)
+    def histogram_graph(self, start_date=None, end_date=None):
+        d = self._get_waiting_times(start_date, end_date)
+        d.addCallback(graph.Histogram, barwidth=0.001)
+        return d
+
+    def _get_waiting_times(self, start_date, end_date):
         conditions = []
         params = []
         if start_date:
@@ -64,7 +75,6 @@ class WaitingTimes(model.Model):
             query,
             'SELECT strftime("%s", created), elapsed from waiting_times',
             conditions, params)
-        d.addCallback(graph.TimelineGraph)
         return d
 
 

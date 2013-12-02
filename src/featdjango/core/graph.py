@@ -33,25 +33,32 @@ class TimelineGraph(object):
 
     implements(IGraph)
 
-    def __init__(self, data, title=''):
+    def __init__(self, data, title='',
+                 plotlabel="Waiting time",
+                 xlabel="Date",
+                 ylabel="Time (s)"):
         '''
         Data should be list of tuples (epoch, time)
         '''
         self.data = data
         self.title = title or ''
+        self.plotlabel = plotlabel
+        self.xlabel = xlabel
+        self.ylabel = ylabel
 
     def to_gnuplot(self):
         script = base_settings + format_block('''
-        set xlabel "Date"
+        set xlabel "%(xlabel)s"
         set xdata time
         set timefmt "%%s"
         set xtics rotate by 90 offset 0,-5 out nomirror
         set format x "%%m/%%d %%H:%%M"
 
-        set ylabel "Waiting time (s)"
+        set ylabel "%(ylabel)s"
         set title "%(title)s"
-        plot "-" using 1:2 w point title "Waiting time"
-        ''' % dict(title=self.title))
+        plot "-" using 1:2 w point title "%(plotlabel)s"
+        ''' % dict(title=self.title, plotlabel=self.plotlabel,
+                   xlabel=self.xlabel, ylabel=self.ylabel))
 
         return format_data(script, self.data)
 
@@ -60,24 +67,28 @@ class Histogram(object):
 
     implements(IGraph)
 
-    def __init__(self, data, title='', barwidth=1):
+    def __init__(self, data, title='', barwidth=1,
+                 xlabel="Time (s)", ylabel="Events in range"):
         '''
         Data should be list of tuples (epoch, time)
         '''
         self.data = data
         self.title = title or ''
         self.barwidth = barwidth
+        self.xlabel = xlabel
+        self.ylabel = ylabel
 
     def to_gnuplot(self):
         script = base_settings + format_block('''
-        set xlabel "Waiting time"
+        set xlabel "%(xlabel)s"
         box(time)=(int(time / %(barwidth)s) * %(barwidth)s)
         set boxwidth %(barwidth)s
 
         set ylabel "Events in range"
         set title "%(title)s"
         plot "-" using (box($2)):(1.0) smooth freq with boxes
-        ''' % dict(title=self.title, barwidth=self.barwidth))
+        ''' % dict(title=self.title, barwidth=self.barwidth,
+                   xlabel=self.xlabel, ylabel=self.ylabel))
 
         return format_data(script, self.data)
 

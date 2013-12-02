@@ -56,6 +56,32 @@ class TimelineGraph(object):
         return format_data(script, self.data)
 
 
+class Histogram(object):
+
+    implements(IGraph)
+
+    def __init__(self, data, title='', barwidth=1):
+        '''
+        Data should be list of tuples (epoch, time)
+        '''
+        self.data = data
+        self.title = title or ''
+        self.barwidth = barwidth
+
+    def to_gnuplot(self):
+        script = base_settings + format_block('''
+        set xlabel "Waiting time"
+        box(time)=(int(time / %(barwidth)s) * %(barwidth)s)
+        set boxwidth %(barwidth)s
+
+        set ylabel "Events in range"
+        set title "%(title)s"
+        plot "-" using (box($2)):(1.0) smooth freq with boxes
+        ''' % dict(title=self.title, barwidth=self.barwidth))
+
+        return format_data(script, self.data)
+
+
 def format_data(header, data, number_of_plots=1):
     stdin = str(header)
     for x in range(number_of_plots):

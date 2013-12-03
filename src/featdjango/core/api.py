@@ -1,11 +1,23 @@
 from feat.common import decorator, defer, annotate
 
-from feat.models import model, value, effect, getter, action, utils, call
-from feat.models.interface import ActionCategories
+from feat.models import model, value, getter, action, call
+from feat.models.interface import ActionCategories, IModel
+from feat.gateway import models
 
-
+from featdjango.agent import agent
 from featdjango.application import featdjango
 from featdjango.core import graph
+
+
+@featdjango.register_model
+@featdjango.register_adapter(agent.DjangoAgent, IModel)
+class Agent(models.Agent):
+
+    model.identity('featdjango.agent')
+
+    model.child('stats', label='Thread stats',
+                source=call.source_call('get_thread_stats'),
+                model='featdjango.server.stats')
 
 
 @featdjango.register_model

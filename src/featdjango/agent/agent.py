@@ -98,6 +98,11 @@ class DjangoAgent(agent.Standalone):
                 thread_stats_file = os.path.join(configure.logdir,
                                                  thread_stats_file)
 
+            # enable image/png content-type and give it a higher
+            # priority than application/json
+            server = state.medium.agency._gateway._server
+            server.enable_mime_type('image/png', 1)
+
         state.server = self.dependency(IServerFactory,
                                        self, desc.port,
                                        str(desc.django_settings_module),

@@ -8,7 +8,7 @@ from zope.interface import implements
 
 from django.core import urlresolvers
 
-from feat.common import log, defer, error, text_helper
+from feat.common import log, defer, error, text_helper, signal
 from feat.agencies import journaler
 from featdjango.core import threadpool
 
@@ -25,6 +25,8 @@ class SqliteStorage(object):
         # [(method, viewname, started, finished)]
         self._jobs_done = journaler.EntriesCache()
 
+        self._sighup_installed = False
+
     ### public methods for storing data ###
 
     def log_waiting_time(self, created, started):
@@ -34,6 +36,27 @@ class SqliteStorage(object):
     def log_job_done(self, method, viewname, started, finished):
         self._jobs_done.append((method, viewname, started, finished))
         self._next_tick()
+
+    ### public ###
+
+    @defer.ensure_async
+    def get_db(self):
+        if self._db is None:
+            self._db = adbapi.ConnectionPool('sqlite3', self._filename,
+                                         cp_min=1, cp_max=1, cp_noisy=True,
+                                         check_same_thread=False,
+                                         timeout=10)
+            self._install_sighup()
+            return self._check_schema()
+        else:
+            return self._db
+
+    def close(self):
+        if self._db:
+            db = self._db
+            self._db = None
+            db.close()
+        self._uninstall_sighup()
 
     ### private ###
 
@@ -47,17 +70,6 @@ class SqliteStorage(object):
         d.addCallback(defer.drop_param, self._flush_next)
         d.addBoth(defer.bridge_param, self._finished_processing)
         d.addErrback(self._error_handler)
-
-    @defer.ensure_async
-    def get_db(self):
-        if self._db is None:
-            self._db = adbapi.ConnectionPool('sqlite3', self._filename,
-                                         cp_min=1, cp_max=1, cp_noisy=True,
-                                         check_same_thread=False,
-                                         timeout=10)
-            return self._check_schema()
-        else:
-            return self._db
 
     def _finished_processing(self):
         self._processing = False
@@ -106,6 +118,26 @@ class SqliteStorage(object):
     def _flush_next(self):
         return self._db.runWithConnection(do_inserts,
                                           self._waiting_times, self._jobs_done)
+
+    ### private rotating database file ###
+
+    def _sighup_handler(self, signum, frame):
+        self.close()
+        reactor.callWhenRunning(self.get_db)
+
+    def _install_sighup(self):
+        if self._sighup_installed:
+            return
+        if self._filename == ':memory:':
+            return
+        signal.signal(signal.SIGHUP, self._sighup_handler)
+        self._sighup_installed = True
+
+    def _uninstall_sighup(self):
+        if not self._sighup_installed:
+            return
+        self._sighup_installed = False
+        signal.unregister(signal.SIGHUP, self._sighup_handler)
 
 
 def do_inserts(connection, waiting_times, jobs_done):
@@ -181,7 +213,8 @@ class Statistics(log.Logger):
             # this is not call to django view, ignore
             pass
         else:
-            self.storage.log_job_done(match.group('method'), resolved.view_name, started, ctime)
+            self.storage.log_job_done(match.group('method'),
+                                      resolved.view_name, started, ctime)
 
     def fallen_asleep(self, job_id, reason=None):
         pass

@@ -106,6 +106,9 @@ class ProcessingTimes(model.Model):
     model.attribute('method', value.String(), source_item(0))
     model.attribute('viewname', value.String(), source_item(1))
     model.attribute('count', value.Integer(), source_item(2))
+    model.attribute('min', value.Float(), source_item(3))
+    model.attribute('average', value.Float(), source_item(4))
+    model.attribute('max', value.Float(), source_item(5))
 
 
 @featdjango.register_model
@@ -116,16 +119,21 @@ class ProcessingTimes(model.Model):
         'handlers', child_names=call.model_call('get_handlers'),
         child_source=getter.model_get('lookup_path'),
         child_model="featdjango.server.stats.processing_times.label",
-        meta=[('html-render', 'array, 4')],
-        model_meta=[('html-render', 'array, 4')],
+        meta=[('html-render', 'array, 4'),
+              ],
+        model_meta=[('html-render', 'array-columns, method, viewname, count, '
+                     'min, average, max'),
+                    ],
         )
 
     def get_handlers(self):
         d = self.source.storage.get_db()
         d.addCallback(query,
-                      'SELECT method, viewname, count(*) '
+                      'SELECT method, viewname, count(*), avg(elapsed), '
+                      'min(elapsed), max(elapsed) '
                       'FROM processed_requests GROUP BY method, viewname;')
-        d.addCallback(lambda x: dict(((method, viewname), count) for method, viewname, count in x))
+        d.addCallback(lambda x: (dict(((r[0], r[1]), tuple(r[2:]))
+                                      for r in x)))
         d.addCallback(defer.keep_param, defer.inject_param, 2,
                       setattr, self, '_handlers')
         d.addCallback(lambda x: [" ".join(key) for key in x.keys()])
@@ -136,7 +144,7 @@ class ProcessingTimes(model.Model):
         if len(key) != 2:
             return
         if hasattr(self, '_handlers'):
-            return key[0], key[1], self._handlers.get(tuple(key), 0)
+            return (key[0], key[1]) + self._handlers.get(tuple(key), 0)
 
     @get_graph('timeline', params)
     def timeline_graph(self, method=None, viewname=None,

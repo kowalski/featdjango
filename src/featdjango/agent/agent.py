@@ -29,6 +29,8 @@ class Descriptor(descriptor.Descriptor):
     document.field('p12_path', None)
     document.field('check_client_cert', False)
     document.field('python_path', list())
+    document.field('enable_statistics', False)
+    document.field('statistics_db_file', ':memory:')
 
 
 @featdjango.register_agent('django_agent')
@@ -88,6 +90,14 @@ class DjangoAgent(agent.Standalone):
                 verify_ca_from_p12=True)
             security_policy = security.ServerPolicy(fac)
 
+        thread_stats_file = None
+        if desc.enable_statistics:
+            thread_stats_file = desc.statistics_db_file
+            if (thread_stats_file != ':memory:' and
+                not os.path.isabs(thread_stats_file)):
+                thread_stats_file = os.path.join(configure.logdir,
+                                                 thread_stats_file)
+
         state.server = self.dependency(IServerFactory,
                                        self, desc.port,
                                        str(desc.django_settings_module),
@@ -95,7 +105,8 @@ class DjangoAgent(agent.Standalone):
                                        prefix=desc.prefix,
                                        interface=desc.interface,
                                        security_policy=security_policy,
-                                       server_stats=stats)
+                                       server_stats=stats,
+                                       thread_stats_file=thread_stats_file)
         return fiber.wrap_defer(state.server.initiate)
 
     @replay.mutable
@@ -109,3 +120,9 @@ class DjangoAgent(agent.Standalone):
         if hasattr(state, 'server'):
             self.info("on_killed called")
             return fiber.wrap_defer(state.server.cleanup)
+
+    ### public used by model api ###
+
+    @replay.immutable
+    def get_thread_stats(self, state):
+        return state.server and state.server.thread_stats

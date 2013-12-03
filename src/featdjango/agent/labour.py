@@ -18,7 +18,8 @@ class Production(labour.BaseLabour, server.Server):
                  host_name=None,
                  prefix=None, interface='',
                  security_policy=None,
-                 server_stats=None):
+                 server_stats=None,
+                 thread_stats_file=None):
 
         from django.utils import importlib
         from django.core import management
@@ -28,6 +29,7 @@ class Production(labour.BaseLabour, server.Server):
         server.Server.__init__(self, host_name, port, log_keeper=log_keeper,
                                prefix=prefix, web_statistics=server_stats,
                                security_policy=security_policy,
+                               thread_stats_file=thread_stats_file,
                                interface=interface)
         labour.BaseLabour.__init__(self, log_keeper)
 

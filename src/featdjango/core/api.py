@@ -118,8 +118,8 @@ class ProcessingTimes(model.Model):
     model.attribute('method', value.String(), source_item(0))
     model.attribute('viewname', value.String(), source_item(1))
     model.attribute('count', value.Integer(), source_item(2))
-    model.attribute('min', value.Float(), source_item(3))
-    model.attribute('average', value.Float(), source_item(4))
+    model.attribute('min', value.Float(), source_item(4))
+    model.attribute('average', value.Float(), source_item(3))
     model.attribute('max', value.Float(), source_item(5))
 
 

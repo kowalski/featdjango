@@ -22,7 +22,7 @@ from setuptools import setup, find_packages
 
 NAME = 'featdjango'
 
-VERSION = '0.2.3'
+VERSION = '0.2.4'
 DESCRIPTION = 'F3AT and Django integration'
 LONG_DESC = DESCRIPTION
 AUTHOR = 'Marek Kowalski',

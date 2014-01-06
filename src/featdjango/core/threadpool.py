@@ -281,16 +281,17 @@ class JobCallback(object):
 
 class ThreadPool(log.Logger):
     """
-    This implementation is inspired by twisted.python.threadpool.ThreadPool.
+    This implementation is inspired by L{twisted.python.threadpool.ThreadPool}.
+
     Comparing to the original it offers:
-    - the possibility to log the statistics to the external object
-    - threaded code can call method returning Deferred and wait for the
-      result synchronously
-    - jobs done in threads are cancellable. When the Deferred returned by
-      deferToThread is cancelled, the thread has limitted time to finish
-      his job, until it gets killed violently (kill_delay parameter)
-    - possibility to have a callable run in the thread context on its
-      initialization
+     - the possibility to log the statistics to the external object
+     - threaded code can call method returning Deferred and wait for the
+       result synchronously
+     - jobs done in threads are cancellable. When the Deferred returned by
+       deferToThread is cancelled, the thread has limitted time to finish
+       his job, until it gets killed violently (kill_delay parameter)
+     - possibility to have a callable run in the thread context on its
+       initialization
     """
 
     def __init__(self, minthreads=5, maxthreads=20, statistics=None,

@@ -29,6 +29,15 @@ check-tests-fast:
 	@make check-tests \
 	   TRIAL_FLAGS="--skip-slow"
 
+doc/reference/html/index.html: Makefile src doc/reference/django
+	PYTHONPATH=doc/reference/django:$$PYTHONPATH DJANGO_SETTINGS_MODULE=settings epydoc featdjango -o doc/reference/html -v
+
+docs:
+	PYTHONPATH=doc/reference/django:$$PYTHONPATH DJANGO_SETTINGS_MODULE=settings pydoc django.core.handlers.base.BaseHandler
+
+	@rm doc/reference/html/index.html
+	make doc/reference/html/index.html
+
 coverage:
 	@test ! -z "$(COVERAGE_MODULES)" ||				\
 	(echo Define COVERAGE_MODULES in your Makefile; exit 1)

@@ -1,4 +1,6 @@
-from feat.common import decorator, defer, annotate
+import time
+
+from feat.common import decorator, defer, annotate, first
 
 from feat.models import model, value, getter, action, call
 from feat.models.interface import ActionCategories, IModel
@@ -39,6 +41,18 @@ class Stats(model.Model):
     model.child('processing_times',
                 model='featdjango.server.stats.processing_times',
                 desc="Statistics of processing the django views")
+    model.child('currently_waiting',
+                model='featdjango.server.stats.current_jobs',
+                desc="View calls waiting for the idle worker to pick them up",
+                view=getter.source_attr('waiting'))
+    model.item_meta('currently_waiting', 'html-render', 'array, 4')
+
+    model.child('currently_processing',
+                model='featdjango.server.stats.current_jobs',
+                desc="View calls being processed at the moment",
+                view=getter.source_attr('processing'))
+    model.item_meta('currently_processing', 'html-render', 'array, 4')
+
     model.attribute('number_of_threads', value.Integer(),
                     getter=getter.source_attr('number_of_threads'),
                     desc="Threads currently running")
@@ -58,6 +72,49 @@ class Stats(model.Model):
 
     def calc_work_to_sleep_ratio(self):
         return float(self.source.busy_time) / self.source.uptime
+
+
+@featdjango.register_model
+class CurrentJobs(model.Collection):
+
+    model.identity('featdjango.server.stats.current_jobs')
+    model.child_model('featdjango.server.stats.current_jobs.job')
+    model.child_names(call.view_call('keys'))
+    model.child_source(getter.model_get('get_item'))
+
+    model.meta('html-render', 'array, 4')
+    model.meta('html-render', 'array-columns, method, view_name, elapsed')
+
+    def init(self):
+        ctime = time.time()
+        self.items = list()
+        for job_id, start_epoch in self.view.iteritems():
+            try:
+                method, view_name = self.source.parse_job_id(job_id)
+            except:
+                continue
+            self.items.append((job_id, method, view_name, ctime - start_epoch))
+
+    def get_item(self, job_id):
+        return first(x for x in self.items if x[0] == job_id)
+
+
+def source_getitem(item):
+
+    def source_getitem(_value, context, **_params):
+        value = context["model"].source[item]
+        return defer.succeed(value)
+
+    return source_getitem
+
+
+@featdjango.register_model
+class CurrentJob(model.Model):
+
+    model.identity('featdjango.server.stats.current_jobs.job')
+    model.attribute('method', value.String(), source_getitem(1))
+    model.attribute('view_name', value.String(), source_getitem(2))
+    model.attribute('elapsed', value.Float(), source_getitem(3))
 
 
 @decorator.parametrized_function

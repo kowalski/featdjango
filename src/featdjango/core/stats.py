@@ -210,20 +210,12 @@ class Statistics(log.Logger):
 
         ctime = time.time()
 
-        # job id is of the form "GET /path-index"
-        match = self.job_id_pattern.search(job_id)
-        if not match:
-            self.debug("Ignoring job_id %r which doesn't match the expected"
-                       " pattern.", job_id)
-            return
         try:
-            resolved = urlresolvers.resolve(match.group('path'))
-        except urlresolvers.Resolver404:
-            # this is not call to django view, ignore
+            method, view_name = self.parse_job_id(job_id)
+        except:
             pass
         else:
-            self.storage.log_job_done(match.group('method'),
-                                      resolved.view_name, started, ctime)
+            self.storage.log_job_done(method, view_name, started, ctime)
             self.busy_time += ctime - started
 
     def fallen_asleep(self, job_id, reason=None):
@@ -242,12 +234,27 @@ class Statistics(log.Logger):
 
     ### protected ###
 
+    def parse_job_id(self, job_id):
+        match = self.job_id_pattern.search(job_id)
+        if not match:
+            self.debug("Ignoring job_id %r which doesn't match the expected"
+                       " pattern.", job_id)
+            return
+        try:
+            resolved = urlresolvers.resolve(match.group('path'))
+        except urlresolvers.Resolver404:
+            # this is not call to django view, ignore
+            return
+        else:
+            return match.group('method'), resolved.view_name
+
     @property
     def uptime(self):
         return self.update_uptime()
 
     def update_uptime(self):
         ctime = time.time()
-        self._uptime_snapshot += (ctime - self._uptime_snapshot_epoch) * self.number_of_threads
+        self._uptime_snapshot += ((ctime - self._uptime_snapshot_epoch)
+                                  * self.number_of_threads)
         self._uptime_snapshot_epoch = ctime
         return self._uptime_snapshot

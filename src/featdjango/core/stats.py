@@ -178,6 +178,15 @@ class Statistics(log.Logger):
         # job_id -> epoch_started
         self.processing = dict()
 
+        # number_of_threads * time_of_operation
+        self._uptime_snapshot = 0
+        # snapshot when the uptime was last time updated
+        self._uptime_snapshot_epoch = time.time()
+        self.number_of_threads = 0
+
+        # busy time (the time the threadpool is actually doing some job)
+        self.busy_time = 0
+
     def new_item(self, job_id, explanation=None):
         self.waiting[job_id] = time.time()
 
@@ -215,6 +224,7 @@ class Statistics(log.Logger):
         else:
             self.storage.log_job_done(match.group('method'),
                                       resolved.view_name, started, ctime)
+            self.busy_time += ctime - started
 
     def fallen_asleep(self, job_id, reason=None):
         pass
@@ -223,7 +233,21 @@ class Statistics(log.Logger):
         pass
 
     def new_thread(self):
-        pass
+        self.update_uptime()
+        self.number_of_threads += 1
 
     def exit_thread(self):
-        pass
+        self.update_uptime()
+        self.number_of_threads -= 1
+
+    ### protected ###
+
+    @property
+    def uptime(self):
+        return self.update_uptime()
+
+    def update_uptime(self):
+        ctime = time.time()
+        self._uptime_snapshot += (ctime - self._uptime_snapshot_epoch) * self.number_of_threads
+        self._uptime_snapshot_epoch = ctime
+        return self._uptime_snapshot

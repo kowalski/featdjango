@@ -39,6 +39,25 @@ class Stats(model.Model):
     model.child('processing_times',
                 model='featdjango.server.stats.processing_times',
                 desc="Statistics of processing the django views")
+    model.attribute('number_of_threads', value.Integer(),
+                    getter=getter.source_attr('number_of_threads'),
+                    desc="Threads currently running")
+    model.attribute('uptime', value.Float(),
+                    getter=getter.source_attr('uptime'),
+                    desc=("Sum of the time of each thread "
+                          "operating (in seconds)"))
+    model.attribute('busy_time', value.Float(),
+                    getter=getter.source_attr('busy_time'),
+                    desc=("Sum of all processing times for "
+                          "all thread (in seconds)"))
+    model.attribute('work_to_sleep_ratio', value.Float(),
+                    getter=call.model_call('calc_work_to_sleep_ratio'))
+
+    model.meta("html-order", "waiting_times, processing_times, "
+               "number_of_threads, uptime, busy_time, work_to_sleep_ratio")
+
+    def calc_work_to_sleep_ratio(self):
+        return float(self.source.busy_time) / self.source.uptime
 
 
 @decorator.parametrized_function

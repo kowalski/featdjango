@@ -178,6 +178,15 @@ class Statistics(log.Logger):
         # job_id -> epoch_started
         self.processing = dict()
 
+        # number_of_threads * time_of_operation
+        self._uptime_snapshot = 0
+        # snapshot when the uptime was last time updated
+        self._uptime_snapshot_epoch = time.time()
+        self.number_of_threads = 0
+
+        # busy time (the time the threadpool is actually doing some job)
+        self.busy_time = 0
+
     def new_item(self, job_id, explanation=None):
         self.waiting[job_id] = time.time()
 
@@ -201,7 +210,31 @@ class Statistics(log.Logger):
 
         ctime = time.time()
 
-        # job id is of the form "GET /path-index"
+        try:
+            method, view_name = self.parse_job_id(job_id)
+        except:
+            pass
+        else:
+            self.storage.log_job_done(method, view_name, started, ctime)
+            self.busy_time += ctime - started
+
+    def fallen_asleep(self, job_id, reason=None):
+        pass
+
+    def woken_up(self, job_id):
+        pass
+
+    def new_thread(self):
+        self.update_uptime()
+        self.number_of_threads += 1
+
+    def exit_thread(self):
+        self.update_uptime()
+        self.number_of_threads -= 1
+
+    ### protected ###
+
+    def parse_job_id(self, job_id):
         match = self.job_id_pattern.search(job_id)
         if not match:
             self.debug("Ignoring job_id %r which doesn't match the expected"
@@ -211,19 +244,17 @@ class Statistics(log.Logger):
             resolved = urlresolvers.resolve(match.group('path'))
         except urlresolvers.Resolver404:
             # this is not call to django view, ignore
-            pass
+            return
         else:
-            self.storage.log_job_done(match.group('method'),
-                                      resolved.view_name, started, ctime)
+            return match.group('method'), resolved.view_name
 
-    def fallen_asleep(self, job_id, reason=None):
-        pass
+    @property
+    def uptime(self):
+        return self.update_uptime()
 
-    def woken_up(self, job_id):
-        pass
-
-    def new_thread(self):
-        pass
-
-    def exit_thread(self):
-        pass
+    def update_uptime(self):
+        ctime = time.time()
+        self._uptime_snapshot += ((ctime - self._uptime_snapshot_epoch)
+                                  * self.number_of_threads)
+        self._uptime_snapshot_epoch = ctime
+        return self._uptime_snapshot

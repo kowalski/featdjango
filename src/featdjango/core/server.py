@@ -98,9 +98,11 @@ class Server(webserver.Server):
 
 
 class FeatHttpRequest(HttpRequest):
-    '''Adapter of feat.web.webserver.Request to the sublcass of
-    django.http.HttpRequest which can be understood by djanbo BaseHandler.'''
-
+    '''
+    Adapter of L{feat.web.webserver.Request} to a subclass of
+    L{django.http.HttpRequest} which can be understood by
+    L{django.core.handlers.base.BaseHandler}
+    '''
     def __init__(self, request, location,
                  server_name='', server_port='', prefix=None):
 

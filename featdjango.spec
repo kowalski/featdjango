@@ -7,7 +7,7 @@
 Name:           python-featdjango
 Summary:        F3AT Django integration
 Version:        %{version}
-Release:        0.1%{?dist}
+Release:        1%{?dist}
 Source0:        featdjango-%{version}.tar.gz
 
 Group:          Development/Languages
@@ -53,6 +53,10 @@ rm -rf $RPM_BUILD_ROOT
 
 
 %changelog
+* Mon Mar 10 2014 Thomas Vander Stichele <thomas at apestaart dot org>
+- 0.3.0-1
+- new release
+
 * Tue Dec 24 2013 Thomas Vander Stichele <thomas at apestaart dot org>
 - 0.2.4-1
 - new release

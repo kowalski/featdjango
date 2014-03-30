@@ -126,6 +126,14 @@ class DjangoAgent(agent.Standalone):
             self.info("on_killed called")
             return fiber.wrap_defer(state.server.cleanup)
 
+    def get_description(self):
+        desc = self.get_descriptor()
+        r = "Port: %s, settings module: %s" % (
+            desc.port, desc.django_settings_module)
+        if desc.prefix:
+            r += ', prefix: %s' % (desc.prefix, )
+        return r
+
     ### public used by model api ###
 
     @replay.immutable

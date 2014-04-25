@@ -2,7 +2,7 @@
 
 %{!?python_sitelib: %define python_sitelib %(%{__python} -c "from distutils.sysconfig import get_python_lib; print get_python_lib()")}
 %{!?pyver: %define pyver %(%{__python} -c "import sys ; print sys.version[:3]")}
-%define version 0.3.0
+%define version 0.3.1
 
 Name:           python-featdjango
 Summary:        F3AT Django integration
@@ -53,6 +53,10 @@ rm -rf $RPM_BUILD_ROOT
 
 
 %changelog
+* Fri Apr 25 2014 Thomas Vander Stichele <thomas at apestaart dot org>
+- 0.3.1-1
+- new release
+
 * Mon Mar 10 2014 Thomas Vander Stichele <thomas at apestaart dot org>
 - 0.3.0-1
 - new release

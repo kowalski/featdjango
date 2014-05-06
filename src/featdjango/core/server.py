@@ -322,8 +322,8 @@ class Root(object):
 
             return self._featstatic, remaining[1:]
 
-        if self._prefix and remaining == ('favicon.ico', ):
-            return self, (self._prefix, 'favicon.ico')
+        if self._prefix and remaining == ['favicon.ico']:
+            return self, [self._prefix, 'favicon.ico']
 
         if self._prefix and remaining[:len(self._prefix)] != self._prefix:
             return PrefixMessage404(self._prefix)
